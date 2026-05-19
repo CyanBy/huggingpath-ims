@@ -5,6 +5,7 @@ import Explore from './pages/Explore';
 import Datasets from './pages/Datasets';
 import ModelDetail from './pages/ModelDetail';
 import Workbench from './pages/Workbench';
+import WorkbenchOther from './pages/WorkbenchOther';
 import About from './pages/About';
 import Login from './pages/Login';
 import CaseLibrary from './pages/CaseLibrary';
@@ -23,6 +24,7 @@ function App() {
           <Route path="/explore" element={<Explore />} />
           <Route path="/model/:id" element={<ModelDetail />} />
           <Route path="/workbench" element={<Workbench />} />
+          <Route path="/workbench/other" element={<WorkbenchOther />} />
           <Route path="/datasets" element={<Datasets />} />
           <Route path="/about" element={<About />} />
         </Routes>

@@ -45,6 +45,21 @@ interface CaseItem {
   slides: Slide[];
 }
 
+type CaseQueueItem = CaseItem & {
+  queueType: 'case';
+};
+
+interface StandaloneSlideQueueItem {
+  queueType: 'slide';
+  id: string;
+  fileName: string;
+  size: string;
+  progress: number;
+  status: 'uploading' | 'ready';
+}
+
+type QueueItem = CaseQueueItem | StandaloneSlideQueueItem;
+
 interface ModelItem {
   id: string;
   name: string;
@@ -117,7 +132,39 @@ const MOCK_CASES: CaseItem[] = [
     ],
   },
 ];
+const toCaseQueueItem = (item: CaseItem): CaseQueueItem => ({
+  ...item,
+  queueType: 'case',
+});
 
+const MOCK_UPLOAD_FILES = [
+  {
+    fileName: 'Temporary_AI_Slide_001.svs',
+    size: '1.4 GB',
+  },
+  {
+    fileName: 'Temporary_AI_Slide_002.sdpc',
+    size: '856 MB',
+  },
+];
+
+const MOCK_LIBRARY_CASES = [
+  {
+    id: 'CAS-2025-003',
+    pathologyNo: '25GA006219',
+    patientName: '患者F',
+    gender: '女',
+    age: 52,
+    organ: '胃',
+    caseType: '活检',
+    slideCount: 2,
+    date: '2025.01.13',
+    slides: [
+      { id: 'SL-006', name: 'HE_gastric_02.svs', stain: 'HE', magnification: '40X', size: '1.3 GB', status: 'pending' as const },
+      { id: 'SL-007', name: 'IHC_HER2_01.svs', stain: 'HER2', magnification: '40X', size: '1.0 GB', status: 'pending' as const },
+    ],
+  },
+];
 const MOCK_MODELS: ModelItem[] = [
   { id: 'mod-1', name: 'CellViT++', status: 'active', tags: ['分割', '检测'], summary: '细胞核检测与分割模型' },
   { id: 'mod-2', name: 'TME Analyzer', status: 'active', tags: ['肿瘤微环境'], summary: '肿瘤微环境分析模型' },
@@ -269,9 +316,13 @@ const Workbench: FC = () => {
   const [mode, setMode] = useState<'clinical' | 'expert'>('clinical');
 
   /* ---- Case / Slide ---- */
+ 
   const [expandedCase, setExpandedCase] = useState<string>('CAS-2025-001');
-  const [selectedSlide, setSelectedSlide] = useState<string>('SL-001');
-  const [queueCases, setQueueCases] = useState<CaseItem[]>(MOCK_CASES);
+const [selectedSlide, setSelectedSlide] = useState<string>('SL-001');
+const [queueCases, setQueueCases] = useState<QueueItem[]>(MOCK_CASES.map(toCaseQueueItem));
+
+const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+const [addTaskType, setAddTaskType] = useState<'slide' | 'case'>('slide');
 
   /* ---- Model ---- */
   const [selectedModel, setSelectedModel] = useState<string>('mod-1');
@@ -377,10 +428,77 @@ const Workbench: FC = () => {
     }, 2000);
     return () => clearInterval(interval);
   }, []);
+/* ---- Upload simulation ---- */
+useEffect(() => {
+  const interval = setInterval(() => {
+    setQueueCases((prev) =>
+      prev.map((item) => {
+        if (item.queueType !== 'slide' || item.status !== 'uploading') return item;
 
+        const nextProgress = Math.min(item.progress + 12, 100);
+
+        return {
+          ...item,
+          progress: nextProgress,
+          status: nextProgress >= 100 ? 'ready' : 'uploading',
+        };
+      }),
+    );
+  }, 450);
+
+  return () => clearInterval(interval);
+}, []);
   /* ---- Derived ---- */
- const activeCase = queueCases.find((c) => c.id === expandedCase);
-  const activeSlide = activeCase?.slides.find((s) => s.id === selectedSlide);
+const activeCase = queueCases.find(
+  (c): c is CaseQueueItem => c.queueType === 'case' && c.id === expandedCase,
+);
+
+const activeSlide = activeCase?.slides.find((s) => s.id === selectedSlide);
+
+const selectedStandaloneSlide = queueCases.find(
+  (item): item is StandaloneSlideQueueItem =>
+    item.queueType === 'slide' && item.id === selectedSlide,
+);
+const handleOpenAddTaskModal = () => {
+  setAddTaskType('slide');
+  setShowAddTaskModal(true);
+};
+
+const handleConfirmAddTask = () => {
+  if (addTaskType === 'slide') {
+    const timestamp = Date.now();
+
+    const newSlides: StandaloneSlideQueueItem[] = MOCK_UPLOAD_FILES.map((file, index) => ({
+      queueType: 'slide',
+      id: `standalone-slide-${timestamp}-${index}`,
+      fileName: file.fileName,
+      size: file.size,
+      progress: 0,
+      status: 'uploading',
+    }));
+
+    setQueueCases((prev) => [...newSlides, ...prev]);
+    setSelectedSlide(newSlides[0].id);
+    setExpandedCase('');
+    setShowAddTaskModal(false);
+    return;
+  }
+
+  const newCases = MOCK_LIBRARY_CASES.map(toCaseQueueItem);
+
+  setQueueCases((prev) => {
+    const existingIds = new Set(prev.map((item) => item.id));
+    const filtered = newCases.filter((item) => !existingIds.has(item.id));
+
+    if (filtered.length === 0) return prev;
+
+    return [...filtered, ...prev];
+  });
+
+  setExpandedCase(newCases[0].id);
+  setSelectedSlide(newCases[0].slides[0]?.id || '');
+  setShowAddTaskModal(false);
+};
   const activeTask = tasks.find((t) => t.id === selectedTask);
 
   const pieData = CLASSIFICATION_DATA.map((d) => ({
@@ -526,121 +644,204 @@ const Workbench: FC = () => {
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto">
-          {/* Case Manager */}
-          <PanelSection>
-            <SectionHeader
-  title="分析队列"
-  action={
-    <div className="flex items-center gap-2">
-      <button
-        onClick={() => {
-          setQueueCases(MOCK_CASES);
-          setExpandedCase('CAS-2025-001');
-          setSelectedSlide('SL-001');
-        }}
-        className="h-8 px-3 rounded-lg bg-[#8f35b7] text-white text-xs font-medium hover:bg-[#a64ed0] transition-all cursor-pointer whitespace-nowrap"
-      >
-        添加病例
-      </button>
-      <button
-        onClick={() => {
-          setQueueCases([]);
-          setExpandedCase('');
-          setSelectedSlide('');
-        }}
-        className="h-8 px-3 rounded-lg border border-white/[0.08] bg-[#202126] text-[#94a3b8] text-xs font-medium hover:text-[#e2e8f0] hover:bg-white/[0.06] transition-all cursor-pointer whitespace-nowrap"
-      >
-        清空队列
-      </button>
-    </div>
-  }
-/>
-            <div className="flex flex-col gap-2">
-              {queueCases.map((c) => {
-                const isExpanded = expandedCase === c.id;
-                return (
-                  <div key={c.id}>
+         {/* Case Manager */}
+<PanelSection>
+  <SectionHeader
+    title="分析队列"
+    action={
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleOpenAddTaskModal}
+          className="h-8 px-3 rounded-lg bg-[#8f35b7] text-white text-xs font-medium hover:bg-[#a64ed0] transition-all cursor-pointer whitespace-nowrap"
+        >
+          添加分析任务
+        </button>
+
+        <button
+          onClick={() => {
+            setQueueCases([]);
+            setExpandedCase('');
+            setSelectedSlide('');
+          }}
+          title="清空队列"
+          className="h-8 w-8 rounded-lg border border-white/[0.08] bg-[#202126] text-[#94a3b8] flex items-center justify-center hover:text-[#f87171] hover:bg-white/[0.06] transition-all cursor-pointer"
+        >
+          <Trash2 size={14} />
+        </button>
+      </div>
+    }
+  />
+
+  <div className="flex flex-col gap-2">
+    {queueCases.map((item) => {
+      if (item.queueType === 'slide') {
+        const isSelected = selectedSlide === item.id;
+        const isUploading = item.status === 'uploading';
+
+        return (
+          <div
+            key={item.id}
+            onClick={() => {
+              setSelectedSlide(item.id);
+              setExpandedCase('');
+            }}
+            className={cn(
+              'p-3 rounded-lg cursor-pointer transition-all duration-150 border-l-[3px]',
+              isSelected
+                ? 'bg-[#2f3138] border-l-[#8f35b7]'
+                : 'bg-[#1f2024] hover:bg-[#2f3138] border-l-transparent',
+            )}
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-[#111217] border border-white/[0.06] flex items-center justify-center shrink-0">
+                <FileText size={18} className="text-[#8f35b7]" />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="text-[#e2e8f0] text-sm font-semibold truncate">
+                  {item.fileName}
+                </div>
+
+                <div className="text-[#64748b] text-xs mt-1">
+                  单切片 · {item.size}
+                </div>
+
+                <div className="text-[#64748b] text-xs mt-1">
+                  {isUploading ? `上传中 ${item.progress}%` : '上传完成 · 待分析'}
+                </div>
+
+                {isUploading && (
+                  <div className="h-1.5 bg-[#202228] rounded-full overflow-hidden mt-2">
                     <div
-                      onClick={() => setExpandedCase(isExpanded ? '' : c.id)}
-                      className={cn(
-                        'flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-150',
-                        isExpanded
-                          ? 'bg-[#2f3138] border-l-[3px] border-l-[#8f35b7]'
-                          : 'bg-[#1f2024] hover:bg-[#2f3138] border-l-[3px] border-l-transparent'
-                      )}
-                    >
-                      <FolderOpen size={20} className="text-[#64748b] shrink-0" />
-                      <div className="flex-1 min-w-0">
-  <div className="text-[#e2e8f0] text-sm font-semibold truncate">
-    {c.patientName}
-  </div>
-  <div className="text-[#64748b] text-xs truncate">
-    {c.pathologyNo} · {c.gender} · {c.age}岁
-  </div>
-  <div className="text-[#64748b] text-xs truncate">
-    {c.organ} · {c.caseType} 
-  </div>
-</div>
-                      <span className="w-5 h-5 rounded-full bg-[#8f35b7] text-white text-[11px] font-medium flex items-center justify-center shrink-0">
-                        {c.slideCount}
-                      </span>
-                      {isExpanded ? <ChevronDown size={14} className="text-[#64748b]" /> : <ChevronRight size={14} className="text-[#64748b]" />}
-                    </div>
-                    <AnimatePresence>
-                      {isExpanded && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.25, ease: [0.175, 0.885, 0.32, 1.275] as [number, number, number, number] }}
-                          className="overflow-hidden"
-                        >
-                          <div className="pl-4 pt-1 pb-1 flex flex-col gap-1">
-                            {c.slides.map((slide) => {
-                              const isSelected = selectedSlide === slide.id;
-                              return (
-                                <div
-                                  key={slide.id}
-                                  onClick={() => setSelectedSlide(slide.id)}
-                                  className={cn(
-                                    'flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150',
-                                    isSelected
-                                      ? 'bg-[#2f3138] border border-[#8f35b7]/30'
-                                      : 'hover:bg-white/[0.02]'
-                                  )}
-                                >
-                                  <div className="w-8 h-8 rounded bg-[#111217] flex items-center justify-center shrink-0 overflow-hidden">
-                                    <img src="/wsi-demo.jpg" alt="" className="w-full h-full object-cover opacity-60" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <div className={cn('text-[13px] truncate', isSelected ? 'text-[#8f35b7]' : 'text-[#e2e8f0]')}>{slide.name}</div>
-                                    <div className="text-[#64748b] text-[11px]">{slide.stain} · {slide.magnification}</div>
-                                  </div>
-                                  <span
-                                    className={cn(
-                                      'w-2 h-2 rounded-full shrink-0',
-                                      slide.status === 'analyzed' ? 'bg-[#22c55e]' : 'bg-[#64748b]'
-                                    )}
-                                  />
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
+                      className="h-full bg-[#8f35b7] rounded-full transition-all duration-300"
+                      style={{ width: `${item.progress}%` }}
+                    />
                   </div>
-                );
-              })}{queueCases.length === 0 && (
-  <div className="rounded-lg border border-dashed border-white/[0.12] bg-[#17181d] px-4 py-8 text-center">
-    <div className="text-[#94a3b8] text-sm">当前分析队列为空</div>
-    <div className="text-[#64748b] text-xs mt-1">
-      点击“添加病例”从病例库选择需要分析的病例
-    </div>
-  </div>
-)}
+                )}
+              </div>
+
+              <span
+                className={cn(
+                  'w-2 h-2 rounded-full shrink-0 mt-2',
+                  isUploading ? 'bg-[#8f35b7] animate-pulse' : 'bg-[#22c55e]',
+                )}
+              />
             </div>
-          </PanelSection>
+          </div>
+        );
+      }
+
+      const c = item;
+      const isExpanded = expandedCase === c.id;
+
+      return (
+        <div key={c.id}>
+          <div
+            onClick={() => setExpandedCase(isExpanded ? '' : c.id)}
+            className={cn(
+              'flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all duration-150',
+              isExpanded
+                ? 'bg-[#2f3138] border-l-[3px] border-l-[#8f35b7]'
+                : 'bg-[#1f2024] hover:bg-[#2f3138] border-l-[3px] border-l-transparent',
+            )}
+          >
+            <FolderOpen size={20} className="text-[#64748b] shrink-0" />
+
+            <div className="flex-1 min-w-0">
+              <div className="text-[#e2e8f0] text-sm font-semibold truncate">
+                {c.patientName}
+              </div>
+              <div className="text-[#64748b] text-xs truncate">
+                {c.pathologyNo} · {c.gender} · {c.age}岁
+              </div>
+              <div className="text-[#64748b] text-xs truncate">
+                {c.organ} · {c.caseType}
+              </div>
+            </div>
+
+            <span className="w-5 h-5 rounded-full bg-[#8f35b7] text-white text-[11px] font-medium flex items-center justify-center shrink-0">
+              {c.slideCount}
+            </span>
+
+            {isExpanded ? (
+              <ChevronDown size={14} className="text-[#64748b]" />
+            ) : (
+              <ChevronRight size={14} className="text-[#64748b]" />
+            )}
+          </div>
+
+          <AnimatePresence>
+            {isExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{
+                  duration: 0.25,
+                  ease: [0.175, 0.885, 0.32, 1.275] as [number, number, number, number],
+                }}
+                className="overflow-hidden"
+              >
+                <div className="pl-4 pt-1 pb-1 flex flex-col gap-1">
+                  {c.slides.map((slide) => {
+                    const isSelected = selectedSlide === slide.id;
+
+                    return (
+                      <div
+                        key={slide.id}
+                        onClick={() => setSelectedSlide(slide.id)}
+                        className={cn(
+                          'flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-all duration-150',
+                          isSelected
+                            ? 'bg-[#2f3138] border border-[#8f35b7]/30'
+                            : 'hover:bg-white/[0.02]',
+                        )}
+                      >
+                        <div className="w-8 h-8 rounded bg-[#111217] flex items-center justify-center shrink-0 overflow-hidden">
+                          <img src="/wsi-demo.jpg" alt="" className="w-full h-full object-cover opacity-60" />
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div
+                            className={cn(
+                              'text-[13px] truncate',
+                              isSelected ? 'text-[#8f35b7]' : 'text-[#e2e8f0]',
+                            )}
+                          >
+                            {slide.name}
+                          </div>
+                          <div className="text-[#64748b] text-[11px]">
+                            {slide.stain} · {slide.magnification}
+                          </div>
+                        </div>
+
+                        <span
+                          className={cn(
+                            'w-2 h-2 rounded-full shrink-0',
+                            slide.status === 'analyzed' ? 'bg-[#22c55e]' : 'bg-[#64748b]',
+                          )}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      );
+    })}
+
+    {queueCases.length === 0 && (
+      <div className="rounded-lg border border-dashed border-white/[0.12] bg-[#17181d] px-4 py-8 text-center">
+        <div className="text-[#94a3b8] text-sm">当前分析队列为空</div>
+        <div className="text-[#64748b] text-xs mt-1">
+          点击“添加分析任务”添加切片或病例
+        </div>
+      </div>
+    )}
+  </div>
+</PanelSection>
 
           {/* Model Selection */}
           <PanelSection>
@@ -841,7 +1042,11 @@ const Workbench: FC = () => {
         {/* Info label */}
         <div className="absolute bottom-4 left-28 z-20 bg-[#111217]/70 backdrop-blur-sm rounded-md px-2.5 py-1">
           <span className="text-[#64748b] text-xs font-mono">
-            {activeSlide ? `${activeSlide.name} · ${activeCase?.organ} · ${activeSlide.stain}` : '19-38190.svs · 胃 · HE'}
+            {selectedStandaloneSlide
+  ? `${selectedStandaloneSlide.fileName} · 单切片 · 待分析`
+  : activeSlide
+    ? `${activeSlide.name} · ${activeCase?.organ} · ${activeSlide.stain}`
+    : '19-38190.svs · 胃 · HE'}
           </span>
         </div>
 
@@ -1029,68 +1234,226 @@ const Workbench: FC = () => {
           </PanelSection>
 
           {/* Results Dashboard */}
-          <PanelSection>
-            <SectionHeader title="分析结果" />
-            {/* Source tag */}
-            <div className="mb-3">
-              <span className="tag-function text-xs">
-                {activeTask?.modelName || 'CellViT++'} · {activeTask?.featureCount?.toLocaleString() || '2,456'} 个检出对象
-              </span>
+          {/* Results Dashboard */}
+<PanelSection>
+  <SectionHeader title="AI结果展示样式说明" />
+
+  <div className="mb-4 rounded-lg border border-[#8f35b7]/25 bg-[#8f35b7]/10 p-3">
+    <div className="text-[#d292f4] text-sm font-semibold mb-1">
+      右侧展示版式协议 / Right Panel Layout Protocol
+    </div>
+    <div className="text-[#94a3b8] text-xs leading-6">
+      以下区域用于向前端说明不同 AI 结果在右侧面板中的展示效果。当前仅为样式总览，不代表最终真实分析结果。
+    </div>
+  </div>
+
+  {/* Text Card */}
+  <div className="mb-4 rounded-xl border border-white/[0.06] bg-[#1f2024] overflow-hidden">
+    <div className="px-3 py-3 border-b border-white/[0.06] bg-[#202228]">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="text-[#e2e8f0] text-sm font-semibold">1. AI诊断文本卡片</div>
+        <span className="h-6 px-2.5 rounded-full bg-[#8f35b7]/20 text-[#d292f4] text-[11px] font-semibold inline-flex items-center">
+          text_card
+        </span>
+      </div>
+      <div className="grid grid-cols-1 gap-1 text-[11px] leading-5">
+        <div>
+          <span className="text-[#64748b]">适用 AI 结果：</span>
+          <span className="text-[#cbd5e1]">诊断结论 / 评分 / 置信度 / 建议</span>
+        </div>
+        <div>
+          <span className="text-[#64748b]">数据来源：</span>
+          <span className="text-[#cbd5e1] font-mono">results.diagnosis</span>
+        </div>
+      </div>
+    </div>
+
+    <div className="p-3">
+      <div className="rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/10 p-3">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <div className="text-[#e2e8f0] text-sm font-semibold">AI 诊断结果</div>
+            <div className="text-[#64748b] text-xs mt-1">基于全切片分析的综合诊断</div>
+          </div>
+          <span className="h-6 px-2 rounded-full bg-[#f59e0b]/20 text-[#ffc274] text-[11px] font-semibold">
+            warning
+          </span>
+        </div>
+
+        <div className="space-y-2">
+          <div className="rounded-md bg-[#111217] border border-white/[0.05] p-2.5">
+            <div className="text-[#64748b] text-xs mb-1">诊断结论</div>
+            <div className="text-[#ff8f8f] text-base font-bold">浸润性导管癌 II 级</div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-md bg-[#111217] border border-white/[0.05] p-2.5">
+              <div className="text-[#64748b] text-xs mb-1">置信度</div>
+              <div className="text-[#e2e8f0] text-sm font-semibold">92.4%</div>
             </div>
-            {/* Statistics cards */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              {CLASSIFICATION_DATA.map((row) => (
-                <div
-                  key={row.type}
-                  className="bg-[#1f2024] border border-white/[0.04] rounded-lg p-3 text-center hover:bg-[#1a2332] transition-colors cursor-pointer"
-                >
-                  <div className="text-[22px] font-bold tab-nums" style={{ color: row.color }}>
-                    {row.count.toLocaleString()}
-                  </div>
-                  <div className="text-[#94a3b8] text-xs mt-1">{row.type}</div>
+            <div className="rounded-md bg-[#111217] border border-white/[0.05] p-2.5">
+              <div className="text-[#64748b] text-xs mb-1">Nottingham 评分</div>
+              <div className="text-[#e2e8f0] text-sm font-semibold">6 分</div>
+            </div>
+          </div>
+
+          <div className="rounded-md bg-[#111217] border border-white/[0.05] p-2.5">
+            <div className="text-[#64748b] text-xs mb-1">建议</div>
+            <div className="text-[#94a3b8] text-xs leading-5 italic">
+              行 ER/PR/HER2 检测及分子分型
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {/* Bar Chart */}
+  <div className="mb-4 rounded-xl border border-white/[0.06] bg-[#1f2024] overflow-hidden">
+    <div className="px-3 py-3 border-b border-white/[0.06] bg-[#202228]">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="text-[#e2e8f0] text-sm font-semibold">2. 细胞类型分布柱状图</div>
+        <span className="h-6 px-2.5 rounded-full bg-[#8f35b7]/20 text-[#d292f4] text-[11px] font-semibold inline-flex items-center">
+          chart_bar
+        </span>
+      </div>
+      <div className="grid grid-cols-1 gap-1 text-[11px] leading-5">
+        <div>
+          <span className="text-[#64748b]">适用 AI 结果：</span>
+          <span className="text-[#cbd5e1]">细胞分类统计 / 目标数量 / 阳性细胞计数</span>
+        </div>
+        <div>
+          <span className="text-[#64748b]">数据来源：</span>
+          <span className="text-[#cbd5e1] font-mono">results.statistics.cell_counts</span>
+        </div>
+      </div>
+    </div>
+
+    <div className="p-3">
+      <div className="mb-3">
+        <div className="text-[#e2e8f0] text-sm font-semibold">细胞类型分布</div>
+        <div className="text-[#64748b] text-xs mt-1">AI 检出的各类细胞数量</div>
+      </div>
+
+      <div className="space-y-3">
+        {CLASSIFICATION_DATA.map((row) => {
+          const maxCount = Math.max(...CLASSIFICATION_DATA.map((item) => item.count));
+          const percentage = Math.round((row.count / maxCount) * 100);
+
+          return (
+            <div key={row.type}>
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full" style={{ background: row.color }} />
+                  <span className="text-[#e2e8f0] text-xs">{row.type}</span>
                 </div>
-              ))}
-            </div>
-            {/* Pie chart */}
-            <div className="bg-[#1f2024] border border-white/[0.04] rounded-lg p-3 mb-4">
-              <PieChart data={pieData} />
-              <div className="flex flex-wrap gap-3 justify-center mt-2">
-                {CLASSIFICATION_DATA.map((row) => (
-                  <div key={row.type} className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: row.color }} />
-                    <span className="text-[#94a3b8] text-xs">{row.type}</span>
-                  </div>
-                ))}
+                <div className="text-[#94a3b8] text-xs tab-nums">
+                  {row.count.toLocaleString()} · {row.percentage}
+                </div>
+              </div>
+              <div className="h-2 rounded-full bg-[#111217] overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{ width: `${percentage}%`, background: row.color }}
+                />
               </div>
             </div>
-            {/* Classification table */}
-            <div className="mb-3">
-              <div className="grid grid-cols-[1.5fr_1fr_1fr_0.8fr] gap-2 px-2.5 py-2 bg-white/[0.02] rounded-t-lg">
-                <span className="text-[#64748b] text-[11px] font-medium uppercase tracking-wider">分类</span>
-                <span className="text-[#64748b] text-[11px] font-medium uppercase tracking-wider">数量</span>
-                <span className="text-[#64748b] text-[11px] font-medium uppercase tracking-wider">密度</span>
-                <span className="text-[#64748b] text-[11px] font-medium uppercase tracking-wider">占比</span>
-              </div>
-              {CLASSIFICATION_DATA.map((row) => (
-                <div
-                  key={row.type}
-                  className="grid grid-cols-[1.5fr_1fr_1fr_0.8fr] gap-2 px-2.5 py-2.5 border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors cursor-pointer"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full shrink-0" style={{ background: row.color }} />
-                    <span className="text-[#e2e8f0] text-sm">{row.type}</span>
-                  </div>
-                  <span className="text-[#e2e8f0] text-sm font-medium tab-nums">{row.count.toLocaleString()}</span>
-                  <span className="text-[#94a3b8] text-sm">{row.density}</span>
-                  <span className="text-[#94a3b8] text-sm">{row.percentage}</span>
-                </div>
-              ))}
+          );
+        })}
+      </div>
+    </div>
+  </div>
+
+  {/* Pie Chart */}
+  <div className="mb-4 rounded-xl border border-white/[0.06] bg-[#1f2024] overflow-hidden">
+    <div className="px-3 py-3 border-b border-white/[0.06] bg-[#202228]">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="text-[#e2e8f0] text-sm font-semibold">3. 组织区域占比饼图</div>
+        <span className="h-6 px-2.5 rounded-full bg-[#8f35b7]/20 text-[#d292f4] text-[11px] font-semibold inline-flex items-center">
+          chart_pie
+        </span>
+      </div>
+      <div className="grid grid-cols-1 gap-1 text-[11px] leading-5">
+        <div>
+          <span className="text-[#64748b]">适用 AI 结果：</span>
+          <span className="text-[#cbd5e1]">组织面积占比 / 成分比例 / 区域组成</span>
+        </div>
+        <div>
+          <span className="text-[#64748b]">数据来源：</span>
+          <span className="text-[#cbd5e1] font-mono">results.statistics.tissue_areas</span>
+        </div>
+      </div>
+    </div>
+
+    <div className="p-3">
+      <div className="mb-3">
+        <div className="text-[#e2e8f0] text-sm font-semibold">组织区域占比</div>
+        <div className="text-[#64748b] text-xs mt-1">各组织类型面积占比，支持环形图展示</div>
+      </div>
+
+      <div className="bg-[#111217] border border-white/[0.04] rounded-lg p-3">
+        <PieChart data={pieData} />
+        <div className="flex flex-wrap gap-3 justify-center mt-2">
+          {CLASSIFICATION_DATA.map((row) => (
+            <div key={row.type} className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ background: row.color }} />
+              <span className="text-[#94a3b8] text-xs">{row.type}</span>
             </div>
-            <button className="btn-secondary w-full text-xs h-9">
-              <Download size={14} />
-              导出 GeoJSON
-            </button>
-          </PanelSection>
+          ))}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {/* Combined View */}
+  <div className="rounded-xl border border-[#8f35b7]/25 bg-[#8f35b7]/10 overflow-hidden">
+    <div className="px-3 py-3 border-b border-[#8f35b7]/20">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="text-[#e2e8f0] text-sm font-semibold">4. 综合视图示例</div>
+        <span className="h-6 px-2.5 rounded-full bg-[#8f35b7]/25 text-[#d292f4] text-[11px] font-semibold inline-flex items-center">
+          combined
+        </span>
+      </div>
+      <div className="text-[#94a3b8] text-xs leading-6">
+        综合视图表示一个 AI 分析结果可以同时由多个 block 组合渲染，例如：文本结论 + 柱状图 + 饼图。
+      </div>
+    </div>
+
+    <div className="p-3 space-y-3">
+      <div className="rounded-lg bg-[#111217] border border-white/[0.05] p-3">
+        <div className="text-[#64748b] text-xs mb-1">展示组合</div>
+        <div className="text-[#e2e8f0] text-sm leading-6">
+          text_card + chart_bar + chart_pie
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-[#111217] border border-white/[0.05] p-3">
+        <div className="text-[#64748b] text-xs mb-1">适用场景</div>
+        <div className="text-[#94a3b8] text-xs leading-6">
+          适合肿瘤微环境分析、IHC 定量分析、组织区域分析等需要同时展示结论、统计和比例图的 AI 模型。
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-[#111217] border border-white/[0.05] p-3">
+        <div className="text-[#64748b] text-xs mb-2">前端实现说明</div>
+        <div className="space-y-1.5 text-xs">
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#8f35b7]" />
+            <span className="text-[#cbd5e1]">根据 layout.right_panel.blocks 顺序渲染</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#8f35b7]" />
+            <span className="text-[#cbd5e1]">根据 block.type 选择展示组件</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#8f35b7]" />
+            <span className="text-[#cbd5e1]">根据 data_source 从 results 中取数据</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</PanelSection>
 
           {/* Analysis Report */}
           <PanelSection last>
@@ -1154,6 +1517,149 @@ const Workbench: FC = () => {
           </PanelSection>
         </div>
       </aside>
+            {showAddTaskModal && (
+        <div className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm flex items-center justify-center px-4">
+          <div className="w-[680px] rounded-2xl border border-white/[0.08] bg-[#1f2024] shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden">
+            <div className="h-14 px-5 border-b border-white/[0.06] flex items-center justify-between">
+              <div>
+                <div className="text-[#e2e8f0] text-base font-semibold">添加分析任务</div>
+                <div className="text-[#64748b] text-xs mt-0.5">
+                  选择要加入分析队列的对象类型
+                </div>
+              </div>
+
+              <button
+                onClick={() => setShowAddTaskModal(false)}
+                className="w-8 h-8 rounded-lg text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.06] transition-all"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-5">
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <button
+                  onClick={() => setAddTaskType('slide')}
+                  className={cn(
+                    'rounded-xl border p-4 text-left transition-all',
+                    addTaskType === 'slide'
+                      ? 'border-[#8f35b7] bg-[#8f35b7]/15'
+                      : 'border-white/[0.08] bg-[#17181d] hover:bg-white/[0.04]',
+                  )}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <FileText size={20} className="text-[#8f35b7]" />
+                    <span className="text-[#e2e8f0] text-sm font-semibold">添加切片</span>
+                  </div>
+                  <div className="text-[#64748b] text-xs leading-5">
+                    模拟从本地选择切片文件，切片将作为独立分析对象加入队列，不进入病例库。
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setAddTaskType('case')}
+                  className={cn(
+                    'rounded-xl border p-4 text-left transition-all',
+                    addTaskType === 'case'
+                      ? 'border-[#8f35b7] bg-[#8f35b7]/15'
+                      : 'border-white/[0.08] bg-[#17181d] hover:bg-white/[0.04]',
+                  )}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <FolderOpen size={20} className="text-[#8f35b7]" />
+                    <span className="text-[#e2e8f0] text-sm font-semibold">添加病例</span>
+                  </div>
+                  <div className="text-[#64748b] text-xs leading-5">
+                    模拟从病例库选择病例，当前仅展示选择效果，不与病例库真实数据联动。
+                  </div>
+                </button>
+              </div>
+
+              {addTaskType === 'slide' ? (
+                <div className="rounded-xl border border-white/[0.08] bg-[#17181d] overflow-hidden">
+                  <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
+                    <div>
+                      <div className="text-[#e2e8f0] text-sm font-semibold">本地切片选择效果</div>
+                      <div className="text-[#64748b] text-xs mt-1">
+                        当前不真实拉起系统文件框，仅模拟已选择切片文件。
+                      </div>
+                    </div>
+
+                    <button className="h-8 px-3 rounded-lg bg-[#8f35b7] text-white text-xs font-medium">
+                      选择切片
+                    </button>
+                  </div>
+
+                  <div className="p-3">
+                    {MOCK_UPLOAD_FILES.map((file) => (
+                      <div
+                        key={file.fileName}
+                        className="h-12 rounded-lg border border-white/[0.06] bg-[#111217] px-3 flex items-center gap-3 mb-2 last:mb-0"
+                      >
+                        <FileText size={16} className="text-[#8f35b7] shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[#e2e8f0] text-sm truncate">{file.fileName}</div>
+                          <div className="text-[#64748b] text-xs">{file.size} · 待加入队列</div>
+                        </div>
+                        <span className="text-[#d292f4] text-xs">已选择</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-white/[0.08] bg-[#17181d] overflow-hidden">
+                  <div className="px-4 py-3 border-b border-white/[0.06]">
+                    <div className="text-[#e2e8f0] text-sm font-semibold">病例库选择效果</div>
+                    <div className="text-[#64748b] text-xs mt-1">
+                      当前模拟从病例库选择病例，不读取病例库页面真实状态。
+                    </div>
+                  </div>
+
+                  <div className="p-3">
+                    {MOCK_LIBRARY_CASES.map((item) => (
+                      <div
+                        key={item.id}
+                        className="rounded-lg border border-[#8f35b7]/30 bg-[#8f35b7]/10 px-3 py-3 flex items-center gap-3"
+                      >
+                        <FolderOpen size={18} className="text-[#8f35b7] shrink-0" />
+
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[#e2e8f0] text-sm font-semibold truncate">
+                            {item.patientName}
+                          </div>
+                          <div className="text-[#64748b] text-xs mt-1 truncate">
+                            {item.pathologyNo} · {item.gender} · {item.age}岁
+                          </div>
+                          <div className="text-[#64748b] text-xs mt-1 truncate">
+                            {item.organ} · {item.caseType} · {item.slideCount}张切片
+                          </div>
+                        </div>
+
+                        <span className="text-[#d292f4] text-xs">已选择</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="h-14 px-5 border-t border-white/[0.06] bg-[#17181d] flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowAddTaskModal(false)}
+                className="h-9 px-4 rounded-lg border border-white/[0.08] bg-[#202126] text-[#94a3b8] text-sm hover:text-[#e2e8f0] transition-all"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleConfirmAddTask}
+                className="h-9 px-4 rounded-lg bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all"
+              >
+                确定
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
