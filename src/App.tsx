@@ -1,4 +1,4 @@
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Explore from './pages/Explore';
@@ -18,22 +18,19 @@ function App() {
     <HashRouter>
       <Layout>
         <Routes>
-          <Route path="/" element={<Login />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/" element={<Explore />} />
-          <Route path="/home" element={<Home />} />
-          <Route path="/cases" element={<CaseLibrary />} />
-          <Route path="/cases/:caseId" element={<CaseDetail />} />
-          <Route path="/explore" element={<Explore />} />
-          <Route path="/model/:id" element={<ModelDetail />} />
-          <Route path="/workbench" element={<Workbench />} />
-          <Route path="/workbench/projects" element={<WorkbenchResearchProjects />} />
-          <Route path="/workbench/models" element={<WorkbenchModelManagement />} />
-          <Route path="/admin" element={<AdminConsole />} />
-          <Route path="/workbench/cases" element={<WorkbenchCaseLibrary />} />
-          <Route path="/datasets" element={<Datasets />} />
-          <Route path="/about" element={<About />} />
-        </Routes>
+  <Route path="/" element={<Navigate to="/home" replace />} />
+  <Route path="/login" element={<Login />} />
+  <Route path="/home" element={<Home />} />
+  <Route path="/cases" element={<CaseLibrary />} />
+  <Route path="/cases/:caseId" element={<CaseDetail />} />
+  <Route path="/explore" element={<Explore />} />
+  <Route path="/model/:id" element={<ModelDetail />} />
+  <Route path="/workbench" element={<Workbench />} />
+  <Route path="/workbench/projects" element={<WorkbenchResearchProjects />} />
+  <Route path="/workbench/models" element={<WorkbenchModelManagement />} />
+  <Route path="/admin" element={<AdminConsole />} />
+  <Route path="/workbench/cases" element={<WorkbenchCaseLibrary />} />
+</Routes>
       </Layout>
     </HashRouter>
   );
