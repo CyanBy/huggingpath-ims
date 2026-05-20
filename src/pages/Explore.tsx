@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -17,11 +18,6 @@ import {
   Heart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-/* ------------------------------------------------------------------ */
-/*  Types                                                               */
-/* ------------------------------------------------------------------ */
-
 
 type ViewMode = 'card' | 'list';
 
@@ -43,10 +39,6 @@ interface Model {
   reviews: number;
   verified: boolean;
 }
-
-/* ------------------------------------------------------------------ */
-/*  Mock Data                                                           */
-/* ------------------------------------------------------------------ */
 
 const MODELS: Model[] = [
   {
@@ -182,10 +174,6 @@ const MODELS: Model[] = [
 const ORGAN_OPTIONS = ['胃', '肠', '脑', '乳腺', '肺', '肝', '肾', '前列腺'];
 const FUNCTION_OPTIONS = ['分割', '检测', '分类', '肿瘤微环境', '空间蛋白组'];
 
-/* ------------------------------------------------------------------ */
-/*  Helpers                                                             */
-/* ------------------------------------------------------------------ */
-
 function statusColor(status: ModelStatus) {
   switch (status) {
     case 'Active':
@@ -216,10 +204,6 @@ function statusIcon(status: ModelStatus) {
   }
 }
 
-/* ------------------------------------------------------------------ */
-/*  Stagger animation variants                                          */
-/* ------------------------------------------------------------------ */
-
 const containerVariants = {
   hidden: {},
   show: {
@@ -240,15 +224,14 @@ const itemVariants = {
 
 const headerVariants = {
   hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0, 0, 0.2, 1] as [number, number, number, number] } },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.4, ease: [0, 0, 0.2, 1] as [number, number, number, number] },
+  },
 };
 
-/* ------------------------------------------------------------------ */
-/*  Page Component                                                      */
-/* ------------------------------------------------------------------ */
-
 export default function Explore() {
-  /* State */
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrgans, setSelectedOrgans] = useState<string[]>([]);
@@ -257,11 +240,9 @@ export default function Explore() {
   const [sortBy, setSortBy] = useState<string>('热度');
   const [showAllOrgans, setShowAllOrgans] = useState(false);
 
-  /* Derived filter data */
   const visibleOrgans = showAllOrgans ? ORGAN_OPTIONS : ORGAN_OPTIONS.slice(0, 6);
   const hasMoreOrgans = ORGAN_OPTIONS.length > 6;
 
-  /* Toggle helpers */
   const toggleOrgan = useCallback((organ: string) => {
     setSelectedOrgans((prev) =>
       prev.includes(organ) ? prev.filter((o) => o !== organ) : [...prev, organ]
@@ -287,11 +268,9 @@ export default function Explore() {
     selectedFunctions.length +
     (statusFilter !== '全部' ? 1 : 0);
 
-  /* Filtering & sorting */
   const filteredModels = useMemo(() => {
     let data = [...MODELS];
 
-    // Search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       data = data.filter(
@@ -303,22 +282,18 @@ export default function Explore() {
       );
     }
 
-    // Organ filter (OR within category)
     if (selectedOrgans.length > 0) {
       data = data.filter((m) => m.organs.some((o) => selectedOrgans.includes(o)));
     }
 
-    // Function filter (OR within category)
     if (selectedFunctions.length > 0) {
       data = data.filter((m) => m.functions.some((f) => selectedFunctions.includes(f)));
     }
 
-    // Status filter
     if (statusFilter !== '全部') {
       data = data.filter((m) => m.status === statusFilter);
     }
 
-    // Sort
     switch (sortBy) {
       case '热度':
         data.sort((a, b) => b.popularity - a.popularity);
@@ -334,13 +309,8 @@ export default function Explore() {
     return data;
   }, [searchQuery, selectedOrgans, selectedFunctions, statusFilter, sortBy]);
 
-  /* ---------------------------------------------------------------- */
-  /*  Render                                                            */
-  /* ---------------------------------------------------------------- */
-
   return (
     <div className="min-h-[60dvh]">
-      {/* ==================== Page Header ==================== */}
       <section className="pt-24 pb-12 border-b border-white/[0.06]">
         <div className="section-container">
           <motion.div
@@ -352,7 +322,6 @@ export default function Explore() {
             }}
             className="flex flex-col gap-6"
           >
-            {/* Eyebrow + Title */}
             <motion.div variants={headerVariants}>
               <span className="text-eyebrow uppercase text-[#64748b] tracking-widest">
                 MODEL HUB
@@ -363,7 +332,6 @@ export default function Explore() {
               </p>
             </motion.div>
 
-            {/* View Toggle + Result Count */}
             <motion.div
               variants={headerVariants}
               className="flex items-center justify-between"
@@ -408,11 +376,9 @@ export default function Explore() {
         </div>
       </section>
 
-      {/* ==================== Filter Toolbar ==================== */}
       <section className="sticky top-16 z-40 bg-[#0f1014]/95 backdrop-blur-md border-b border-white/[0.06] py-5">
         <div className="section-container">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Search */}
             <div className="relative">
               <Search
                 size={16}
@@ -427,7 +393,6 @@ export default function Explore() {
               />
             </div>
 
-            {/* Organ Filter */}
             <div>
               <label className="text-caption text-[#64748b] block mb-1.5">器官</label>
               <div className="flex flex-wrap gap-1.5">
@@ -459,7 +424,6 @@ export default function Explore() {
               </div>
             </div>
 
-            {/* Function Filter */}
             <div>
               <label className="text-caption text-[#64748b] block mb-1.5">功能</label>
               <div className="flex flex-wrap gap-1.5">
@@ -483,7 +447,6 @@ export default function Explore() {
               </div>
             </div>
 
-            {/* Status Filter */}
             <div>
               <label className="text-caption text-[#64748b] block mb-1.5">状态</label>
               <div className="relative">
@@ -505,7 +468,6 @@ export default function Explore() {
               </div>
             </div>
 
-            {/* Sort */}
             <div>
               <label className="text-caption text-[#64748b] block mb-1.5">排序</label>
               <div className="relative">
@@ -526,7 +488,6 @@ export default function Explore() {
             </div>
           </div>
 
-          {/* Active filters + clear */}
           {activeFilterCount > 0 && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -548,6 +509,7 @@ export default function Explore() {
                   </button>
                 </span>
               ))}
+
               {selectedFunctions.map((fn) => (
                 <span
                   key={fn}
@@ -563,6 +525,7 @@ export default function Explore() {
                   </button>
                 </span>
               ))}
+
               {statusFilter !== '全部' && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-[rgba(143,53,183,0.10)] border border-[rgba(143,53,183,0.25)] text-[#b86bdd]">
                   状态: {statusFilter}
@@ -575,6 +538,7 @@ export default function Explore() {
                   </button>
                 </span>
               )}
+
               <button
                 onClick={clearAllFilters}
                 className="text-xs text-[#8f35b7] hover:text-[#b86bdd] hover:underline underline-offset-4 transition-all ml-1"
@@ -586,7 +550,6 @@ export default function Explore() {
         </div>
       </section>
 
-      {/* ==================== Results ==================== */}
       <section className="py-8 pb-20">
         <div className="section-container">
           {filteredModels.length === 0 ? (
@@ -641,23 +604,21 @@ export default function Explore() {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  ModelCard (Grid View)                                               */
-/* ------------------------------------------------------------------ */
-
 function ModelCard({ model }: { model: Model }) {
+  const navigate = useNavigate();
+
   return (
     <motion.article
       variants={itemVariants}
       className="card-base flex flex-col gap-4 group"
       whileTap={{ scale: 0.98 }}
     >
-      {/* Top row: status + trust badges */}
       <div className="flex items-center justify-between">
         <span className={cn('status-badge', statusColor(model.status))}>
           {statusIcon(model.status)}
           {model.status}
         </span>
+
         <div className="flex items-center gap-1.5">
           {model.verified && (
             <span
@@ -668,6 +629,7 @@ function ModelCard({ model }: { model: Model }) {
               Verified
             </span>
           )}
+
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-[rgba(168,85,247,0.12)] text-[#c084fc] border border-[rgba(168,85,247,0.20)]">
             <Heart size={10} />
             {model.popularity}
@@ -675,7 +637,6 @@ function ModelCard({ model }: { model: Model }) {
         </div>
       </div>
 
-      {/* Name + ID */}
       <div>
         <h3 className="text-h3 text-[#e2e8f0] group-hover:text-[#b86bdd] transition-colors duration-150">
           {model.name}
@@ -683,10 +644,8 @@ function ModelCard({ model }: { model: Model }) {
         <p className="font-mono text-mono-sm text-[#475569] mt-1">{model.id}</p>
       </div>
 
-      {/* Summary */}
       <p className="text-body text-[#94a3b8] line-clamp-2">{model.summary}</p>
 
-      {/* Tags */}
       <div className="flex flex-wrap gap-1.5">
         {model.organs.map((o) => (
           <span key={o} className="tag-organ">
@@ -700,7 +659,6 @@ function ModelCard({ model }: { model: Model }) {
         ))}
       </div>
 
-      {/* Meta row */}
       <div className="flex items-center justify-between text-caption text-[#64748b]">
         <span>{model.deployment}</span>
         <div className="flex items-center gap-3">
@@ -715,13 +673,17 @@ function ModelCard({ model }: { model: Model }) {
         </div>
       </div>
 
-      {/* Action buttons */}
       <div className="flex items-center gap-3 mt-auto pt-2 border-t border-white/[0.05]">
         <button className="btn-secondary h-9 px-4 text-sm gap-1.5">
           <Eye size={14} />
           查看详情
         </button>
-        <button className="btn-primary h-9 px-4 text-sm gap-1.5">
+
+        <button
+          type="button"
+          onClick={() => navigate('/workbench')}
+          className="btn-primary h-9 px-4 text-sm gap-1.5"
+        >
           <Play size={14} />
           运行模型
         </button>
@@ -730,35 +692,34 @@ function ModelCard({ model }: { model: Model }) {
   );
 }
 
-/* ------------------------------------------------------------------ */
-/*  ModelListRow (List View)                                            */
-/* ------------------------------------------------------------------ */
-
 function ModelListRow({ model }: { model: Model }) {
+  const navigate = useNavigate();
+
   return (
     <motion.article
       variants={itemVariants}
       className="bg-[#24262c] border border-white/[0.06] rounded-xl px-5 py-4 flex flex-col sm:grid sm:grid-cols-[2fr_1fr_1fr_1fr_0.8fr] sm:items-center gap-3 sm:gap-4 group hover:border-[rgba(143,53,183,0.30)] hover:-translate-y-0.5 hover:shadow-card-hover transition-all duration-200"
       whileTap={{ scale: 0.99 }}
     >
-      {/* Column 1: Status + Name */}
       <div className="flex flex-col gap-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className={cn('status-badge text-[11px]', statusColor(model.status))}>
             {statusIcon(model.status)}
             {model.status}
           </span>
+
           {model.verified && (
             <CheckCircle2 size={12} className="text-[#a64ed0]" />
           )}
         </div>
+
         <h4 className="text-h4 text-[#e2e8f0] truncate group-hover:text-[#b86bdd] transition-colors">
           {model.name}
         </h4>
+
         <p className="font-mono text-[11px] text-[#475569] truncate">{model.id}</p>
       </div>
 
-      {/* Column 2: Organs */}
       <div className="flex flex-wrap gap-1">
         {model.organs.slice(0, 3).map((o) => (
           <span key={o} className="tag-organ text-[11px] py-0.5 px-2">
@@ -770,7 +731,6 @@ function ModelListRow({ model }: { model: Model }) {
         )}
       </div>
 
-      {/* Column 3: Functions */}
       <div className="flex flex-wrap gap-1">
         {model.functions.slice(0, 3).map((f) => (
           <span key={f} className="tag-function text-[11px] py-0.5 px-2">
@@ -782,7 +742,6 @@ function ModelListRow({ model }: { model: Model }) {
         )}
       </div>
 
-      {/* Column 4: Stats */}
       <div className="flex flex-col gap-0.5 text-caption text-[#64748b]">
         <span className="inline-flex items-center gap-1">
           <Download size={12} />
@@ -795,12 +754,16 @@ function ModelListRow({ model }: { model: Model }) {
         <span>{model.updatedAt}</span>
       </div>
 
-      {/* Column 5: Actions */}
       <div className="flex items-center gap-2 sm:justify-end">
         <button className="text-sm text-[#8f35b7] hover:text-[#b86bdd] hover:underline underline-offset-4 transition-all">
           查看
         </button>
-        <button className="h-8 px-3 bg-transparent border border-[#8f35b7] text-[#8f35b7] rounded-lg text-xs font-medium inline-flex items-center gap-1 hover:bg-[rgba(143,53,183,0.10)] hover:border-[#b86bdd] transition-all duration-150">
+
+        <button
+          type="button"
+          onClick={() => navigate('/workbench')}
+          className="h-8 px-3 bg-transparent border border-[#8f35b7] text-[#8f35b7] rounded-lg text-xs font-medium inline-flex items-center gap-1 hover:bg-[rgba(143,53,183,0.10)] hover:border-[#b86bdd] transition-all duration-150"
+        >
           <Play size={12} />
           运行
         </button>
