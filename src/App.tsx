@@ -11,7 +11,8 @@ import Login from './pages/Login';
 import CaseLibrary from './pages/CaseLibrary';
 import CaseDetail from './pages/CaseDetail';
 import WorkbenchResearchProjects from './pages/WorkbenchResearchProjects';
-
+import WorkbenchModelManagement from './pages/WorkbenchModelManagement';
+import AdminConsole from './pages/AdminConsole';
 function App() {
   return (
     <HashRouter>
@@ -27,6 +28,8 @@ function App() {
           <Route path="/model/:id" element={<ModelDetail />} />
           <Route path="/workbench" element={<Workbench />} />
           <Route path="/workbench/projects" element={<WorkbenchResearchProjects />} />
+          <Route path="/workbench/models" element={<WorkbenchModelManagement />} />
+          <Route path="/admin" element={<AdminConsole />} />
           <Route path="/workbench/cases" element={<WorkbenchCaseLibrary />} />
           <Route path="/datasets" element={<Datasets />} />
           <Route path="/about" element={<About />} />

@@ -60,7 +60,18 @@ interface StandaloneSlideQueueItem {
   status: 'uploading' | 'ready';
 }
 
-type QueueItem = CaseQueueItem | StandaloneSlideQueueItem;
+interface ProjectQueueItem {
+  queueType: 'project';
+  id: string;
+  projectNo: string;
+  name: string;
+  caseCount: number;
+  wsiCount: number;
+  modelCount: number;
+  status: 'ready';
+}
+
+type QueueItem = CaseQueueItem | StandaloneSlideQueueItem | ProjectQueueItem;
 
 interface ModelItem {
   id: string;
@@ -165,6 +176,28 @@ const MOCK_LIBRARY_CASES = [
       { id: 'SL-006', name: 'HE_gastric_02.svs', stain: 'HE', magnification: '40X', size: '1.3 GB', status: 'pending' as const },
       { id: 'SL-007', name: 'IHC_HER2_01.svs', stain: 'HER2', magnification: '40X', size: '1.0 GB', status: 'pending' as const },
     ],
+  },
+];
+const MOCK_RESEARCH_PROJECTS: ProjectQueueItem[] = [
+  {
+    queueType: 'project',
+    id: 'PRJ-2026-001',
+    projectNo: 'PRJ-2026-001',
+    name: '乳腺癌 HER2 队列研究',
+    caseCount: 12,
+    wsiCount: 33,
+    modelCount: 3,
+    status: 'ready',
+  },
+  {
+    queueType: 'project',
+    id: 'PRJ-2026-002',
+    projectNo: 'PRJ-2026-002',
+    name: '结直肠癌微环境多模态分析',
+    caseCount: 9,
+    wsiCount: 31,
+    modelCount: 2,
+    status: 'ready',
   },
 ];
 const MOCK_MODELS: ModelItem[] = [
@@ -336,7 +369,7 @@ const [selectedSlide, setSelectedSlide] = useState<string>('');
 const [queueCases, setQueueCases] = useState<QueueItem[]>([]);
 
 const [showAddTaskModal, setShowAddTaskModal] = useState(false);
-const [addTaskType, setAddTaskType] = useState<'slide' | 'case'>('slide');
+const [addTaskType, setAddTaskType] = useState<'slide' | 'case' | 'project'>('slide');
 
   /* ---- Model ---- */
   const [selectedModel, setSelectedModel] = useState<string>('mod-1');
@@ -498,20 +531,40 @@ const handleConfirmAddTask = () => {
     return;
   }
 
-  const newCases = MOCK_LIBRARY_CASES.map(toCaseQueueItem);
+  if (addTaskType === 'case') {
+    const newCases = MOCK_LIBRARY_CASES.map(toCaseQueueItem);
 
-  setQueueCases((prev) => {
-    const existingIds = new Set(prev.map((item) => item.id));
-    const filtered = newCases.filter((item) => !existingIds.has(item.id));
+    setQueueCases((prev) => {
+      const existingIds = new Set(prev.map((item) => item.id));
+      const filtered = newCases.filter((item) => !existingIds.has(item.id));
 
-    if (filtered.length === 0) return prev;
+      if (filtered.length === 0) return prev;
 
-    return [...filtered, ...prev];
-  });
+      return [...filtered, ...prev];
+    });
 
-  setExpandedCase(newCases[0].id);
-  setSelectedSlide(newCases[0].slides[0]?.id || '');
-  setShowAddTaskModal(false);
+    setExpandedCase(newCases[0].id);
+    setSelectedSlide(newCases[0].slides[0]?.id || '');
+    setShowAddTaskModal(false);
+    return;
+  }
+
+  if (addTaskType === 'project') {
+    const selectedProjects = MOCK_RESEARCH_PROJECTS;
+
+    setQueueCases((prev) => {
+      const existingIds = new Set(prev.map((item) => item.id));
+      const filtered = selectedProjects.filter((item) => !existingIds.has(item.id));
+
+      if (filtered.length === 0) return prev;
+
+      return [...filtered, ...prev];
+    });
+
+    setExpandedCase('');
+    setSelectedSlide('');
+    setShowAddTaskModal(false);
+  }
 };
   const activeTask = tasks.find((t) => t.id === selectedTask);
   const createAnalysisTask = () => {
@@ -769,6 +822,39 @@ const goLogin = () => {
         );
       }
 
+      if (item.queueType === 'project') {
+        return (
+          <div
+            key={item.id}
+            className="p-3 rounded-lg cursor-pointer transition-all duration-150 border-l-[3px] bg-[#1f2024] hover:bg-[#2f3138] border-l-[#8f35b7]"
+          >
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-[#111217] border border-white/[0.06] flex items-center justify-center shrink-0">
+                <FolderOpen size={18} className="text-[#d292f4]" />
+              </div>
+
+              <div className="flex-1 min-w-0">
+                <div className="text-[#e2e8f0] text-sm font-semibold truncate">
+                  {item.name}
+                </div>
+
+                <div className="text-[#64748b] text-xs mt-1 truncate">
+                  {item.projectNo} · 项目分析
+                </div>
+
+                <div className="text-[#64748b] text-xs mt-1 truncate">
+                  {item.caseCount} 个 Case · {item.wsiCount} 张 WSI · {item.modelCount} 个模型适用
+                </div>
+              </div>
+
+              <span className="h-5 px-2 rounded-full bg-[#8f35b7]/20 text-[#d292f4] text-[11px] font-medium flex items-center justify-center shrink-0 mt-1">
+                项目
+              </span>
+            </div>
+          </div>
+        );
+      }
+
       const c = item;
       const isExpanded = expandedCase === c.id;
 
@@ -874,7 +960,7 @@ const goLogin = () => {
       <div className="rounded-lg border border-dashed border-white/[0.12] bg-[#17181d] px-4 py-8 text-center">
         <div className="text-[#94a3b8] text-sm">当前分析队列为空</div>
         <div className="text-[#64748b] text-xs mt-1">
-          点击“添加分析任务”添加切片或病例
+          点击“添加分析任务”添加切片、病例或项目
         </div>
       </div>
     )}
@@ -1591,7 +1677,7 @@ const goLogin = () => {
       </aside>
             {showAddTaskModal && (
         <div className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm flex items-center justify-center px-4">
-          <div className="w-[680px] rounded-2xl border border-white/[0.08] bg-[#1f2024] shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden">
+          <div className="w-[820px] rounded-2xl border border-white/[0.08] bg-[#1f2024] shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden">
             <div className="h-14 px-5 border-b border-white/[0.06] flex items-center justify-between">
               <div>
                 <div className="text-[#e2e8f0] text-base font-semibold">添加分析任务</div>
@@ -1609,7 +1695,7 @@ const goLogin = () => {
             </div>
 
             <div className="p-5">
-              <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="grid grid-cols-3 gap-3 mb-5">
                 <button
                   onClick={() => setAddTaskType('slide')}
                   className={cn(
@@ -1645,9 +1731,27 @@ const goLogin = () => {
                     模拟从病例库选择病例，当前仅展示选择效果，不与病例库真实数据联动。
                   </div>
                 </button>
+
+                <button
+                  onClick={() => setAddTaskType('project')}
+                  className={cn(
+                    'rounded-xl border p-4 text-left transition-all',
+                    addTaskType === 'project'
+                      ? 'border-[#8f35b7] bg-[#8f35b7]/15'
+                      : 'border-white/[0.08] bg-[#17181d] hover:bg-white/[0.04]',
+                  )}
+                >
+                  <div className="flex items-center gap-3 mb-2">
+                    <FolderOpen size={20} className="text-[#8f35b7]" />
+                    <span className="text-[#e2e8f0] text-sm font-semibold">添加项目</span>
+                  </div>
+                  <div className="text-[#64748b] text-xs leading-5">
+                    模拟从研究项目中选择项目，按项目下 Case / WSI 批量进入分析队列。
+                  </div>
+                </button>
               </div>
 
-              {addTaskType === 'slide' ? (
+              {addTaskType === 'slide' && (
                 <div className="rounded-xl border border-white/[0.08] bg-[#17181d] overflow-hidden">
                   <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
                     <div>
@@ -1678,7 +1782,9 @@ const goLogin = () => {
                     ))}
                   </div>
                 </div>
-              ) : (
+              )}
+
+              {addTaskType === 'case' && (
                 <div className="rounded-xl border border-white/[0.08] bg-[#17181d] overflow-hidden">
                   <div className="px-4 py-3 border-b border-white/[0.06]">
                     <div className="text-[#e2e8f0] text-sm font-semibold">病例库选择效果</div>
@@ -1704,6 +1810,48 @@ const goLogin = () => {
                           </div>
                           <div className="text-[#64748b] text-xs mt-1 truncate">
                             {item.organ} · {item.caseType} · {item.slideCount}张切片
+                          </div>
+                        </div>
+
+                        <span className="text-[#d292f4] text-xs">已选择</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {addTaskType === 'project' && (
+                <div className="rounded-xl border border-white/[0.08] bg-[#17181d] overflow-hidden">
+                  <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
+                    <div>
+                      <div className="text-[#e2e8f0] text-sm font-semibold">研究项目选择效果</div>
+                      <div className="text-[#64748b] text-xs mt-1">
+                        当前不真实联动研究项目管理，仅模拟已选择研究项目。
+                      </div>
+                    </div>
+
+                    <button className="h-8 px-3 rounded-lg bg-[#8f35b7] text-white text-xs font-medium">
+                      选择项目
+                    </button>
+                  </div>
+
+                  <div className="p-3 space-y-2">
+                    {MOCK_RESEARCH_PROJECTS.map((project) => (
+                      <div
+                        key={project.id}
+                        className="rounded-lg border border-[#8f35b7]/30 bg-[#8f35b7]/10 px-3 py-3 flex items-center gap-3"
+                      >
+                        <FolderOpen size={18} className="text-[#8f35b7] shrink-0" />
+
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[#e2e8f0] text-sm font-semibold truncate">
+                            {project.name}
+                          </div>
+                          <div className="text-[#64748b] text-xs mt-1 truncate">
+                            {project.projectNo} · {project.caseCount} 个 Case · {project.wsiCount} 张 WSI
+                          </div>
+                          <div className="text-[#64748b] text-xs mt-1 truncate">
+                            {project.modelCount} 个模型适用 · 项目批量分析
                           </div>
                         </div>
 

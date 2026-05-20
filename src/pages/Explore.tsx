@@ -18,10 +18,12 @@ import {
   Heart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                               */
 /* ------------------------------------------------------------------ */
+
 
 type ViewMode = 'card' | 'list';
 
@@ -256,6 +258,19 @@ export default function Explore() {
   const [statusFilter, setStatusFilter] = useState<string>('全部');
   const [sortBy, setSortBy] = useState<string>('热度');
   const [showAllOrgans, setShowAllOrgans] = useState(false);
+  const navigate = useNavigate();
+
+  const handleRunModel = useCallback(
+    (model: Model) => {
+      navigate('/workbench', {
+        state: {
+          runModelId: model.id,
+          runModelName: model.name,
+        },
+      });
+    },
+    [navigate]
+  );
 
   /* Derived filter data */
   const visibleOrgans = showAllOrgans ? ORGAN_OPTIONS : ORGAN_OPTIONS.slice(0, 6);
@@ -616,7 +631,7 @@ export default function Explore() {
                   className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
                 >
                   {filteredModels.map((model) => (
-                    <ModelCard key={model.id} model={model} />
+                    <ModelCard key={model.id} model={model} onRun={handleRunModel} />
                   ))}
                 </motion.div>
               ) : (
@@ -629,7 +644,7 @@ export default function Explore() {
                   className="flex flex-col gap-3"
                 >
                   {filteredModels.map((model) => (
-                    <ModelListRow key={model.id} model={model} />
+                    <ModelListRow key={model.id} model={model} onRun={handleRunModel} />
                   ))}
                 </motion.div>
               )}
@@ -645,7 +660,7 @@ export default function Explore() {
 /*  ModelCard (Grid View)                                               */
 /* ------------------------------------------------------------------ */
 
-function ModelCard({ model }: { model: Model }) {
+function ModelCard({ model, onRun }: { model: Model; onRun: (model: Model) => void }) {
   return (
     <motion.article
       variants={itemVariants}
@@ -721,7 +736,11 @@ function ModelCard({ model }: { model: Model }) {
           <Eye size={14} />
           查看详情
         </button>
-        <button className="btn-primary h-9 px-4 text-sm gap-1.5">
+        <button
+          type="button"
+          onClick={() => onRun(model)}
+          className="btn-primary h-9 px-4 text-sm gap-1.5"
+        >
           <Play size={14} />
           运行模型
         </button>
@@ -734,7 +753,7 @@ function ModelCard({ model }: { model: Model }) {
 /*  ModelListRow (List View)                                            */
 /* ------------------------------------------------------------------ */
 
-function ModelListRow({ model }: { model: Model }) {
+function ModelListRow({ model, onRun }: { model: Model; onRun: (model: Model) => void }) {
   return (
     <motion.article
       variants={itemVariants}
@@ -800,7 +819,11 @@ function ModelListRow({ model }: { model: Model }) {
         <button className="text-sm text-[#8f35b7] hover:text-[#b86bdd] hover:underline underline-offset-4 transition-all">
           查看
         </button>
-        <button className="h-8 px-3 bg-transparent border border-[#8f35b7] text-[#8f35b7] rounded-lg text-xs font-medium inline-flex items-center gap-1 hover:bg-[rgba(143,53,183,0.10)] hover:border-[#b86bdd] transition-all duration-150">
+        <button
+          type="button"
+          onClick={() => onRun(model)}
+          className="h-8 px-3 bg-transparent border border-[#8f35b7] text-[#8f35b7] rounded-lg text-xs font-medium inline-flex items-center gap-1 hover:bg-[rgba(143,53,183,0.10)] hover:border-[#b86bdd] transition-all duration-150"
+        >
           <Play size={12} />
           运行
         </button>

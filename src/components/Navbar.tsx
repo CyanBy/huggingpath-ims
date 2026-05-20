@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Search, Github, Menu, X, ChevronDown, UserCircle, LogOut } from 'lucide-react';
+import { Search, Github, Menu, X, ChevronDown, UserCircle, LogOut, ShieldCheck } from 'lucide-react';
 import Logo from './Logo';
 
 const navLinks = [
@@ -13,6 +13,7 @@ const workbenchLinks = [
   { label: '分析队列', path: '/workbench' },
   { label: 'Case 管理', path: '/workbench/cases' },
   { label: '研究项目管理', path: '/workbench/projects' },
+  { label: '模型管理', path: '/workbench/models' },
 ];
 
 export default function Navbar() {
@@ -55,6 +56,7 @@ export default function Navbar() {
     location.pathname === '/explore' || location.pathname.startsWith('/model/');
 
   const isWorkbenchActive = location.pathname.startsWith('/workbench');
+  const isAdminActive = location.pathname.startsWith('/admin');
 const goLogin = () => {
   const redirect = `${location.pathname}${location.search}`;
   navigate(`/login?redirect=${encodeURIComponent(redirect)}`);
@@ -232,6 +234,19 @@ const logout = () => {
     )}
   </div>
 )}
+
+          <Link
+            to="/admin"
+            className={`hidden sm:inline-flex h-9 px-3 rounded-lg border text-sm font-medium items-center gap-2 transition-all duration-150 ${
+              isAdminActive
+                ? 'border-[#8f35b7]/60 bg-[#8f35b7]/20 text-[#d292f4]'
+                : 'border-white/[0.10] bg-[#17181d] text-[#94a3b8] hover:text-[#e2e8f0] hover:border-[#8f35b7]/45 hover:bg-[#8f35b7]/10'
+            }`}
+            title="后台管理"
+          >
+            <ShieldCheck size={16} />
+            后台管理
+          </Link>
           {/* Mobile hamburger */}
           <button
             className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.06] transition-all duration-150"
@@ -296,6 +311,17 @@ const logout = () => {
               }`}
             >
               研究项目
+            </Link>
+
+            <Link
+              to="/admin"
+              className={`px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                isAdminActive
+                  ? 'bg-white/[0.08] text-[#e2e8f0]'
+                  : 'text-[#94a3b8] hover:text-[#e2e8f0]'
+              }`}
+            >
+              后台管理
             </Link>
 
             <Link
