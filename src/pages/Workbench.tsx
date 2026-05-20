@@ -112,39 +112,6 @@ interface ClassificationRow {
 /* Mock Data                                                           */
 /* ------------------------------------------------------------------ */
 
-const MOCK_CASES: CaseItem[] = [
-  {
-    id: 'CAS-2025-001',
-    pathologyNo: '25AH032093',
-    patientName: '患者A',
-    gender: '男',
-    age: 58,
-    organ: '胃',
-    caseType: '活检',
-    slideCount: 3,
-    date: '2025.01.15',
-    slides: [
-      { id: 'SL-001', name: 'HE_stomach_01.svs', stain: 'HE', magnification: '40X', size: '1.2 GB', status: 'analyzed' },
-      { id: 'SL-002', name: 'IHC_Ki67_01.svs', stain: 'Ki67', magnification: '40X', size: '980 MB', status: 'pending' },
-      { id: 'SL-003', name: 'IHC_PDL1_01.svs', stain: 'PD-L1', magnification: '40X', size: '1.1 GB', status: 'pending' },
-    ],
-  },
-  {
-    id: 'CAS-2025-002',
-    pathologyNo: '25BR018762',
-    patientName: '患者B',
-    gender: '女',
-    age: 46,
-    organ: '乳腺',
-    caseType: '活检',
-    slideCount: 2,
-    date: '2025.01.14',
-    slides: [
-      { id: 'SL-004', name: 'HE_breast_01.svs', stain: 'HE', magnification: '40X', size: '2.3 GB', status: 'pending' },
-      { id: 'SL-005', name: 'HE_breast_02.svs', stain: 'HE', magnification: '40X', size: '2.1 GB', status: 'pending' },
-    ],
-  },
-];
 const toCaseQueueItem = (item: CaseItem): CaseQueueItem => ({
   ...item,
   queueType: 'case',
@@ -225,14 +192,7 @@ const CLASSIFICATION_DATA: ClassificationRow[] = [
   { type: '正常细胞', color: '#7c2bc6', count: 4712, density: '2.3 /mm²', percentage: '9.4%' },
 ];
 
-const EXPERT_PARAMS = [
-  { id: 'batch_size', label: '推理批次大小', type: 'number' as const, default: 16, min: 1, max: 64, description: '每次送入GPU的图像patch数量' },
-  { id: 'confidence', label: '置信度阈值', type: 'range' as const, default: 0.5, min: 0.1, max: 0.9, step: 0.01, description: '阈值越高，结果越严格' },
-  { id: 'roi', label: '分析区域', type: 'select' as const, default: 'auto', options: ['全片分析', '自动检测组织区域', '手动选择ROI'], description: '选择需要AI分析的组织区域范围' },
-  { id: 'min_size', label: '最小细胞尺寸', type: 'number' as const, default: 5, min: 1, max: 50, description: '小于此尺寸的目标将被忽略 (μm)' },
-  { id: 'gpu_accelerate', label: 'GPU加速', type: 'boolean' as const, default: true, description: '使用GPU进行推理加速' },
-  { id: 'nms_threshold', label: 'NMS阈值', type: 'range' as const, default: 0.3, min: 0, max: 1, step: 0.05, description: '非极大值抑制阈值' },
-];
+
 
 const CLINICAL_PARAMS = [
   { id: 'roi', label: '分析区域', type: 'select' as const, default: 'auto', options: ['全片分析', '自动检测组织区域', '手动选择ROI'], description: '选择需要AI分析的组织区域范围' },
@@ -566,7 +526,7 @@ const handleConfirmAddTask = () => {
     setShowAddTaskModal(false);
   }
 };
-  const activeTask = tasks.find((t) => t.id === selectedTask);
+
   const createAnalysisTask = () => {
   const selectedModelItem = MOCK_MODELS.find((model) => model.id === selectedModel);
 

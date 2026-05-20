@@ -4,13 +4,9 @@ import {
   BarChart3,
   Brain,
   CheckCircle2,
-  Clock3,
   FileText,
   Plus,
   Search,
-  Settings,
-  Shield,
-  Sparkles,
 } from 'lucide-react';
 
 type ModelVisibility = 'private' | 'public';

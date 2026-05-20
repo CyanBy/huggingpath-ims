@@ -3,14 +3,11 @@ import {
   BarChart3,
   Building2,
   Database,
-  FileText,
   Settings,
   ShieldCheck,
   Users,
   Brain,
   AlertTriangle,
-  CheckCircle2,
-  XCircle,
 } from 'lucide-react';
 
 type AdminTab = 'overview' | 'users' | 'organizations' | 'models' | 'data' | 'settings';
