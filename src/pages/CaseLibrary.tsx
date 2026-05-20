@@ -151,7 +151,7 @@ function SelectBox({
   );
 }
 
-export default function CaseLibrary() {
+export default function WorkbenchCaseLibrary() {
   const navigate = useNavigate();
   const [cases, setCases] = useState<CaseRow[]>(initialCases);
   const [part, setPart] = useState('部位：全部');

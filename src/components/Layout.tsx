@@ -9,7 +9,7 @@ interface LayoutProps {
 
 const Layout: FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
-  const isLoginPage = location.pathname === '/' || location.pathname === '/login';
+  const isLoginPage = location.pathname === '/login';
 
   return (
     <div className="min-h-[100dvh] flex flex-col bg-[#0f1014]">

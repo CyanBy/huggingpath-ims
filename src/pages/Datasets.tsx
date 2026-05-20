@@ -255,7 +255,7 @@ export default function Datasets() {
               <span className="text-eyebrow uppercase text-[#64748b] tracking-widest">
                 DATASET REGISTRY
               </span>
-              <h1 className="text-h1 text-[#e2e8f0] mt-2">数据集目录</h1>
+              <h1 className="text-h1 text-[#e2e8f0] mt-2">研究项目列表</h1>
               <p className="text-body-lg text-[#94a3b8] mt-2">
                 发现公开病理数据集，用于模型训练、验证和基准测试
               </p>

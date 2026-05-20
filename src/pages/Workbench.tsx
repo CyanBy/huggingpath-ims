@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+
 import type { FC } from 'react';
 import {
   ZoomIn,
@@ -18,6 +19,7 @@ import {
   ClipboardList,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -310,16 +312,28 @@ const PieChart: FC<{ data: { label: string; value: number; color: string }[] }> 
 /* ------------------------------------------------------------------ */
 /* Main Component                                                      */
 /* ------------------------------------------------------------------ */
-
+const GUEST_ANALYSIS_LIMIT = 3;
 const Workbench: FC = () => {
   /* ---- Mode ---- */
-  const [mode, setMode] = useState<'clinical' | 'expert'>('clinical');
+  const navigate = useNavigate();
+const location = useLocation();
+
+const [isLoggedIn, setIsLoggedIn] = useState(() => {
+  return localStorage.getItem('isLoggedIn') === 'true';
+});
+
+const [guestAnalysisCount, setGuestAnalysisCount] = useState(() => {
+  return Number(localStorage.getItem('guestAnalysisCount') || '0');
+});
+
+const [showLoginRequired, setShowLoginRequired] = useState(false);
+
 
   /* ---- Case / Slide ---- */
  
-  const [expandedCase, setExpandedCase] = useState<string>('CAS-2025-001');
-const [selectedSlide, setSelectedSlide] = useState<string>('SL-001');
-const [queueCases, setQueueCases] = useState<QueueItem[]>(MOCK_CASES.map(toCaseQueueItem));
+const [expandedCase, setExpandedCase] = useState<string>('');
+const [selectedSlide, setSelectedSlide] = useState<string>('');
+const [queueCases, setQueueCases] = useState<QueueItem[]>([]);
 
 const [showAddTaskModal, setShowAddTaskModal] = useState(false);
 const [addTaskType, setAddTaskType] = useState<'slide' | 'case'>('slide');
@@ -500,7 +514,53 @@ const handleConfirmAddTask = () => {
   setShowAddTaskModal(false);
 };
   const activeTask = tasks.find((t) => t.id === selectedTask);
+  const createAnalysisTask = () => {
+  const selectedModelItem = MOCK_MODELS.find((model) => model.id === selectedModel);
 
+  const newTask: TaskItem = {
+    id: `task-${Date.now()}`,
+    modelName: selectedModelItem?.name || 'AI Model',
+    status: 'running',
+    progress: 1,
+    time: '刚刚',
+    featureCount: 0,
+  };
+
+  setTasks((prev) => [newTask, ...prev]);
+  setSelectedTask(newTask.id);
+};
+
+const handleSubmitAnalysisTask = () => {
+  if (queueCases.length === 0) {
+    return;
+  }
+
+  const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
+
+  if (loggedIn) {
+    setIsLoggedIn(true);
+    createAnalysisTask();
+    return;
+  }
+
+  const currentCount = Number(localStorage.getItem('guestAnalysisCount') || '0');
+
+  if (currentCount >= GUEST_ANALYSIS_LIMIT) {
+    setShowLoginRequired(true);
+    return;
+  }
+
+  const nextCount = currentCount + 1;
+  localStorage.setItem('guestAnalysisCount', String(nextCount));
+  setGuestAnalysisCount(nextCount);
+
+  createAnalysisTask();
+};
+
+const goLogin = () => {
+  const redirect = `${location.pathname}${location.search}`;
+  navigate(`/login?redirect=${encodeURIComponent(redirect)}`);
+};
   const pieData = CLASSIFICATION_DATA.map((d) => ({
     label: d.type,
     value: d.count,
@@ -618,29 +678,7 @@ const handleConfirmAddTask = () => {
       {/* LEFT PANEL                                                    */}
       {/* ============================================================= */}
       <aside className="w-[320px] min-w-[260px] max-w-[380px] flex flex-col bg-[#1f2024] rounded-xl border border-white/[0.06] overflow-hidden shrink-0">
-        {/* Mode Toggle */}
-        <div className="p-4 border-b border-white/[0.06]">
-          <div className="flex bg-[#202228] rounded-lg p-[3px]">
-            <button
-              onClick={() => setMode('clinical')}
-              className={cn(
-                'flex-1 py-1.5 text-[13px] font-medium rounded-md transition-all duration-200 cursor-pointer',
-                mode === 'clinical' ? 'bg-[#8f35b7] text-white' : 'text-[#94a3b8] hover:text-[#e2e8f0]'
-              )}
-            >
-              临床模式
-            </button>
-            <button
-              onClick={() => setMode('expert')}
-              className={cn(
-                'flex-1 py-1.5 text-[13px] font-medium rounded-md transition-all duration-200 cursor-pointer',
-                mode === 'expert' ? 'bg-[#8f35b7] text-white' : 'text-[#94a3b8] hover:text-[#e2e8f0]'
-              )}
-            >
-              专家模式
-            </button>
-          </div>
-        </div>
+        
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto">
@@ -899,20 +937,14 @@ const handleConfirmAddTask = () => {
           <PanelSection last>
             <SectionHeader title="分析参数" />
             <div className="flex flex-col">
-              {(mode === 'clinical' ? CLINICAL_PARAMS : EXPERT_PARAMS).map((param) => (
+              {CLINICAL_PARAMS.map((param) => (
                 <div key={param.id} className="py-3 border-b border-white/[0.04] last:border-0">
                   <div className="flex items-center justify-between mb-2">
                     <label className="text-[#e2e8f0] text-sm">{param.label}</label>
-                    {mode === 'expert' && (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#a64ed0]/10 text-[#a64ed0] border border-[#a64ed0]/20">
-                        {param.type}
-                      </span>
-                    )}
+                   
                   </div>
                   <div className="mb-1">{renderParamInput(param)}</div>
-                  {mode === 'expert' && (
-                    <p className="text-[#64748b] text-xs">{param.description}</p>
-                  )}
+                 
                 </div>
               ))}
             </div>
@@ -921,14 +953,18 @@ const handleConfirmAddTask = () => {
 
         {/* Submit Task — sticky bottom */}
         <div className="p-4 bg-[#0f1014] border-t border-white/[0.08] shrink-0">
-          <button className="btn-primary w-full h-11 text-sm">
-            <Play size={16} />
-            提交分析任务
-          </button>
-          <div className="flex gap-2 mt-2">
-            <button className="btn-secondary flex-1 text-xs h-8">保存配置</button>
-            <button className="btn-secondary flex-1 text-xs h-8">加载配置</button>
-          </div>
+          <button onClick={handleSubmitAnalysisTask} className="btn-primary w-full h-11 text-sm">
+  <Play size={16} />
+  提交分析任务
+</button>
+
+{!isLoggedIn && (
+  <div className="mt-2 rounded-lg border border-[#8f35b7]/20 bg-[#8f35b7]/10 px-3 py-2 text-[11px] leading-5 text-[#d292f4]">
+    游客模式可体验 {GUEST_ANALYSIS_LIMIT} 次分析任务，当前已使用{' '}
+    {Math.min(guestAnalysisCount, GUEST_ANALYSIS_LIMIT)} / {GUEST_ANALYSIS_LIMIT} 次。
+  </div>
+)}
+         
         </div>
       </aside>
 
@@ -1516,6 +1552,42 @@ const handleConfirmAddTask = () => {
             </div>
           </PanelSection>
         </div>
+              {showLoginRequired && (
+        <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
+          <div className="w-[460px] rounded-2xl border border-white/[0.08] bg-[#1f2024] shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden">
+            <div className="px-6 pt-6 pb-4 border-b border-white/[0.06]">
+              <div className="text-[#f1f3f6] text-lg font-bold">登录后继续分析</div>
+              <div className="text-[#94a3b8] text-sm leading-6 mt-2">
+                游客模式最多可提交 {GUEST_ANALYSIS_LIMIT} 次 AI 分析任务。当前游客额度已用完，登录后可继续提交分析任务。
+              </div>
+            </div>
+
+            <div className="px-6 py-5">
+              <div className="rounded-xl border border-[#8f35b7]/25 bg-[#8f35b7]/10 p-4">
+                <div className="text-[#d292f4] text-sm font-semibold mb-2">当前操作已暂停</div>
+                <div className="text-[#94a3b8] text-xs leading-6">
+                  点击“前往登录”后进入登录页。登录成功后将返回当前工作台页面，你可以再次点击“提交分析任务”继续。
+                </div>
+              </div>
+            </div>
+
+            <div className="h-14 px-6 border-t border-white/[0.06] bg-[#17181d] flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowLoginRequired(false)}
+                className="h-9 px-4 rounded-lg border border-white/[0.08] bg-[#202126] text-[#94a3b8] text-sm hover:text-[#e2e8f0] transition-all"
+              >
+                稍后再说
+              </button>
+              <button
+                onClick={goLogin}
+                className="h-9 px-4 rounded-lg bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all"
+              >
+                前往登录
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       </aside>
             {showAddTaskModal && (
         <div className="fixed inset-0 z-[100] bg-black/55 backdrop-blur-sm flex items-center justify-center px-4">

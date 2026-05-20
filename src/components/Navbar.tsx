@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Search, Github, Menu, X, ChevronDown } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Search, Github, Menu, X, ChevronDown, UserCircle, LogOut } from 'lucide-react';
 import Logo from './Logo';
 
 const navLinks = [
@@ -11,13 +11,20 @@ const navLinks = [
 
 const workbenchLinks = [
   { label: '分析队列', path: '/workbench' },
-  { label: '病例库', path: '/workbench/other' },
+  { label: 'Case 管理', path: '/workbench/cases' },
+  { label: '研究项目管理', path: '/workbench/projects' },
 ];
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('isLoggedIn') === 'true';
+  });
+
   const location = useLocation();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -31,10 +38,42 @@ export default function Navbar() {
     setMobileOpen(false);
   }, [location.pathname]);
 
+  useEffect(() => {
+  const syncLoginState = () => {
+    setIsLoggedIn(localStorage.getItem('isLoggedIn') === 'true');
+  };
+
+  window.addEventListener('storage', syncLoginState);
+  window.addEventListener('authChange', syncLoginState);
+
+  return () => {
+    window.removeEventListener('storage', syncLoginState);
+    window.removeEventListener('authChange', syncLoginState);
+  };
+}, []);
   const isModelCenterActive =
     location.pathname === '/explore' || location.pathname.startsWith('/model/');
 
   const isWorkbenchActive = location.pathname.startsWith('/workbench');
+const goLogin = () => {
+  const redirect = `${location.pathname}${location.search}`;
+  navigate(`/login?redirect=${encodeURIComponent(redirect)}`);
+};
+
+const logout = () => {
+  localStorage.removeItem('isLoggedIn');
+  setIsLoggedIn(false);
+  setUserMenuOpen(false);
+  window.dispatchEvent(new Event('authChange'));
+  
+};
+  const resetGuestUsage = () => {
+  localStorage.removeItem('isLoggedIn');
+  localStorage.removeItem('guestAnalysisCount');
+  setIsLoggedIn(false);
+  setUserMenuOpen(false);
+  window.dispatchEvent(new Event('authChange'));
+};
 
   return (
     <header
@@ -149,7 +188,50 @@ export default function Navbar() {
           >
             <Github size={20} />
           </a>
+{/* Login / User */}
+{!isLoggedIn ? (
+  <button
+    onClick={goLogin}
+    className="h-9 px-4 rounded-lg bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all duration-150"
+  >
+    登录
+  </button>
+) : (
+  <div className="relative">
+    <button
+      onClick={() => setUserMenuOpen((prev) => !prev)}
+      className="w-9 h-9 rounded-full border border-[#8f35b7]/40 bg-[#8f35b7]/20 text-[#d292f4] flex items-center justify-center hover:bg-[#8f35b7]/30 transition-all duration-150"
+      title="用户菜单"
+    >
+      <UserCircle size={22} />
+    </button>
 
+    {userMenuOpen && (
+      <div className="absolute right-0 top-[44px] w-[150px] rounded-lg border border-white/[0.08] bg-[#1f2024]/98 backdrop-blur-xl shadow-[0_18px_48px_rgba(0,0,0,0.38)] p-1.5 z-[80]">
+        <div className="px-3 py-2 border-b border-white/[0.06] mb-1">
+          <div className="text-[#e2e8f0] text-sm font-medium">演示用户</div>
+          <div className="text-[#64748b] text-xs mt-0.5">已登录</div>
+        </div>
+
+        <button
+          onClick={logout}
+          className="w-full h-9 px-3 rounded-md text-sm text-[#94a3b8] hover:text-[#ff9c9c] hover:bg-white/[0.06] flex items-center gap-2 transition-all duration-150"
+        >
+  
+          <LogOut size={15} />
+          退出登录
+        </button>
+        <button
+  onClick={resetGuestUsage}
+  className="w-full h-9 px-3 rounded-md text-sm text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.06] flex items-center gap-2 transition-all duration-150"
+>
+  <LogOut size={15} />
+  重置游客次数
+</button>
+      </div>
+    )}
+  </div>
+)}
           {/* Mobile hamburger */}
           <button
             className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.06] transition-all duration-150"
