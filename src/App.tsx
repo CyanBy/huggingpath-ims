@@ -7,6 +7,7 @@ import ModelDetail from './pages/ModelDetail';
 import Workbench from './pages/Workbench';
 import WorkbenchCaseLibrary from './pages/WorkbenchCaseLibrary';
 import About from './pages/About';
+
 import Login from './pages/Login';
 import CaseLibrary from './pages/CaseLibrary';
 import CaseDetail from './pages/CaseDetail';
@@ -22,6 +23,8 @@ function App() {
   <Route path="/login" element={<Login />} />
   <Route path="/home" element={<Home />} />
   <Route path="/cases" element={<CaseLibrary />} />
+  <Route path="/datasets" element={<Datasets />} />
+  <Route path="/about" element={<About />} />
   <Route path="/cases/:caseId" element={<CaseDetail />} />
   <Route path="/explore" element={<Explore />} />
   <Route path="/model/:id" element={<ModelDetail />} />
