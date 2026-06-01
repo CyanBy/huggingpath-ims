@@ -52,6 +52,35 @@ type ProjectInferenceRow = {
   duration: string;
 };
 
+type ProjectMemberRole = '项目所有者' | '项目管理员' | '研究员' | '观察者';
+type ProjectMemberType = '本机构成员' | '外部协作者';
+type ProjectMemberStatus = '已加入' | '待接受' | '已失效';
+
+type ProjectMemberRow = {
+  id: string;
+  name: string;
+  email: string;
+  organization: string;
+  memberType: ProjectMemberType;
+  role: ProjectMemberRole;
+  permissions: string[];
+  joinMethod: '直接邀请' | '邀请码';
+  status: ProjectMemberStatus;
+  joinedAt: string;
+};
+
+type ProjectInviteCodeRow = {
+  id: string;
+  code: string;
+  link: string;
+  defaultRole: Exclude<ProjectMemberRole, '项目所有者' | '项目管理员'>;
+  expiresIn: string;
+  usageLimit: string;
+  usedCount: number;
+  status: '有效' | '已失效';
+  createdAt: string;
+};
+
 type AnalysisVersionStatus = '分析中' | '分析失败' | '分析完成';
 
 type AnalysisVersion = {
@@ -173,6 +202,95 @@ const initialProjectWsi: ProjectWsiRow[] = [
   },
 ];
 
+const initialProjectMembers: ProjectMemberRow[] = [
+  {
+    id: 'member-001',
+    name: 'NPC',
+    email: 'owner@huggingpath.com',
+    organization: '仁达病理中心',
+    memberType: '本机构成员',
+    role: '项目所有者',
+    permissions: ['全部权限'],
+    joinMethod: '直接邀请',
+    status: '已加入',
+    joinedAt: '2026-05-01 09:30',
+  },
+  {
+    id: 'member-002',
+    name: 'Zhang San',
+    email: 'zhangsan@example.com',
+    organization: '仁达病理中心',
+    memberType: '本机构成员',
+    role: '项目管理员',
+    permissions: ['编辑项目', '管理成员', '添加 Case', '上传 WSI', '发起分析', '下载结果'],
+    joinMethod: '直接邀请',
+    status: '已加入',
+    joinedAt: '2026-05-03 10:12',
+  },
+  {
+    id: 'member-003',
+    name: 'Li Ming',
+    email: 'liming@example.com',
+    organization: '仁达病理中心',
+    memberType: '本机构成员',
+    role: '研究员',
+    permissions: ['查看项目', '添加 Case', '上传 WSI', '发起分析', '查看结果'],
+    joinMethod: '直接邀请',
+    status: '已加入',
+    joinedAt: '2026-05-06 14:20',
+  },
+  {
+    id: 'member-004',
+    name: 'Dr. Chen',
+    email: 'chen.external@hospital.org',
+    organization: '示例医院',
+    memberType: '外部协作者',
+    role: '观察者',
+    permissions: ['查看项目', '查看结果'],
+    joinMethod: '邀请码',
+    status: '待接受',
+    joinedAt: '-',
+  },
+];
+
+const initialInviteCodes: ProjectInviteCodeRow[] = [
+  {
+    id: 'invite-001',
+    code: 'HP-PRJ-7K29',
+    link: 'https://huggingpath.local/invite/HP-PRJ-7K29',
+    defaultRole: '观察者',
+    expiresIn: '7 天',
+    usageLimit: '1 次',
+    usedCount: 0,
+    status: '有效',
+    createdAt: '2026-05-20 10:12',
+  },
+  {
+    id: 'invite-002',
+    code: 'HP-PRJ-Q8M4',
+    link: 'https://huggingpath.local/invite/HP-PRJ-Q8M4',
+    defaultRole: '研究员',
+    expiresIn: '30 天',
+    usageLimit: '5 次',
+    usedCount: 2,
+    status: '有效',
+    createdAt: '2026-05-18 16:40',
+  },
+];
+
+const internalMemberOptions = [
+  { name: 'Wang Yu', email: 'wangyu@example.com', organization: '仁达病理中心' },
+  { name: 'Liu Fang', email: 'liufang@example.com', organization: '仁达病理中心' },
+  { name: 'Zhao Lei', email: 'zhaolei@example.com', organization: '仁达病理中心' },
+];
+
+const rolePermissionMap: Record<ProjectMemberRole, string[]> = {
+  项目所有者: ['全部权限'],
+  项目管理员: ['编辑项目', '管理成员', '添加 Case', '上传 WSI', '发起分析', '查看结果', '下载结果'],
+  研究员: ['查看项目', '添加 Case', '上传 WSI', '发起分析', '查看结果', '下载结果'],
+  观察者: ['查看项目', '查看结果'],
+};
+
 const initialProjects: ResearchProject[] = [
   {
     id: 'PRJ-2026-001',
@@ -279,7 +397,7 @@ function ProjectDetail({
   project: ResearchProject;
   onBack: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'cases' | 'wsi' | 'records'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'cases' | 'wsi' | 'records' | 'members'>('overview');
 
   const [isEditing, setIsEditing] = useState(false);
   const [editableDescription, setEditableDescription] = useState(project.description);
@@ -288,16 +406,29 @@ function ProjectDetail({
   const [caseRows, setCaseRows] = useState<ProjectCaseRow[]>(initialProjectCases);
   const [wsiRows, setWsiRows] = useState<ProjectWsiRow[]>(initialProjectWsi);
   const [inferenceRows] = useState<ProjectInferenceRow[]>(initialProjectInferenceRows);
+  const [memberRows, setMemberRows] = useState<ProjectMemberRow[]>(initialProjectMembers);
+  const [inviteCodeRows, setInviteCodeRows] = useState<ProjectInviteCodeRow[]>(initialInviteCodes);
 
   const [selectedInferenceRecord, setSelectedInferenceRecord] = useState<ProjectInferenceRow | null>(null);
   const [inferenceDrawerMode, setInferenceDrawerMode] = useState<'detail' | 'result'>('detail');
   const [selectedAnalysisVersionId, setSelectedAnalysisVersionId] = useState('analysis-003');
+
+  const [memberKeyword, setMemberKeyword] = useState('');
+  const [showInviteMemberModal, setShowInviteMemberModal] = useState(false);
+  const [showInviteCodeModal, setShowInviteCodeModal] = useState(false);
+  const [selectedInternalMemberEmail, setSelectedInternalMemberEmail] = useState(internalMemberOptions[0].email);
+  const [internalMemberRole, setInternalMemberRole] = useState<Exclude<ProjectMemberRole, '项目所有者'>>('研究员');
+  const [inviteNote, setInviteNote] = useState('');
+  const [inviteDefaultRole, setInviteDefaultRole] = useState<Exclude<ProjectMemberRole, '项目所有者' | '项目管理员'>>('观察者');
+  const [inviteExpiresIn, setInviteExpiresIn] = useState('7 天');
+  const [inviteUsageLimit, setInviteUsageLimit] = useState('1 次');
 
   const tabs = [
     { key: 'overview' as const, label: '概览' },
     { key: 'cases' as const, label: `Case (${caseRows.length})` },
     { key: 'wsi' as const, label: `WSI (${wsiRows.length})` },
     { key: 'records' as const, label: '推理记录' },
+    { key: 'members' as const, label: `成员 (${memberRows.length})` },
   ];
 
   const cancelEdit = () => {
@@ -352,6 +483,101 @@ function ProjectDetail({
   const closeInferenceDrawer = () => {
     setSelectedInferenceRecord(null);
     setInferenceDrawerMode('detail');
+  };
+
+  const filteredMemberRows = memberRows.filter((member) => {
+    if (!memberKeyword.trim()) return true;
+
+    const text = `${member.name} ${member.email} ${member.organization} ${member.role} ${member.memberType}`.toLowerCase();
+    return text.includes(memberKeyword.trim().toLowerCase());
+  });
+
+  const renderMemberStatus = (status: ProjectMemberStatus) => {
+    const className =
+      status === '已加入'
+        ? 'border-[#3f6212] bg-[#3f6212]/35 text-[#84cc16]'
+        : status === '待接受'
+          ? 'border-[#8f35b7]/40 bg-[#8f35b7]/20 text-[#d292f4]'
+          : 'border-white/[0.08] bg-white/[0.05] text-[#94a3b8]';
+
+    return (
+      <span className={`h-6 px-2 rounded border text-xs inline-flex items-center ${className}`}>
+        {status}
+      </span>
+    );
+  };
+
+  const renderInviteStatus = (status: ProjectInviteCodeRow['status']) => {
+    const className =
+      status === '有效'
+        ? 'border-[#3f6212] bg-[#3f6212]/35 text-[#84cc16]'
+        : 'border-white/[0.08] bg-white/[0.05] text-[#94a3b8]';
+
+    return (
+      <span className={`h-6 px-2 rounded border text-xs inline-flex items-center ${className}`}>
+        {status}
+      </span>
+    );
+  };
+
+  const addInternalMember = () => {
+    const selectedMember = internalMemberOptions.find((item) => item.email === selectedInternalMemberEmail);
+
+    if (!selectedMember) return;
+
+    const exists = memberRows.some((member) => member.email === selectedMember.email);
+
+    if (exists) {
+      setShowInviteMemberModal(false);
+      return;
+    }
+
+    const nextMember: ProjectMemberRow = {
+      id: `member-${Date.now()}`,
+      name: selectedMember.name,
+      email: selectedMember.email,
+      organization: selectedMember.organization,
+      memberType: '本机构成员',
+      role: internalMemberRole,
+      permissions: rolePermissionMap[internalMemberRole],
+      joinMethod: '直接邀请',
+      status: '已加入',
+      joinedAt: '2026-05-20 16:30',
+    };
+
+    setMemberRows((prev) => [nextMember, ...prev]);
+    setInviteNote('');
+    setShowInviteMemberModal(false);
+  };
+
+  const generateInviteCode = () => {
+    const randomCode = Math.random().toString(36).slice(2, 6).toUpperCase();
+    const code = `HP-PRJ-${randomCode}`;
+
+    const nextInvite: ProjectInviteCodeRow = {
+      id: `invite-${Date.now()}`,
+      code,
+      link: `https://huggingpath.local/invite/${code}`,
+      defaultRole: inviteDefaultRole,
+      expiresIn: inviteExpiresIn,
+      usageLimit: inviteUsageLimit,
+      usedCount: 0,
+      status: '有效',
+      createdAt: '2026-05-20 16:30',
+    };
+
+    setInviteCodeRows((prev) => [nextInvite, ...prev]);
+    setShowInviteCodeModal(false);
+  };
+
+  const closeInviteCode = (id: string) => {
+    setInviteCodeRows((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, status: '已失效' } : item))
+    );
+  };
+
+  const removeMember = (id: string) => {
+    setMemberRows((prev) => prev.filter((member) => member.id !== id || member.role === '项目所有者'));
   };
 
   const renderInferenceStatus = (status: ProjectInferenceRow['status']) => {
@@ -776,6 +1002,246 @@ function ProjectDetail({
         </div>
       )}
 
+
+      {activeTab === 'members' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-4 gap-4">
+            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+              <div className="text-[#64748b] text-sm mb-3">成员总数</div>
+              <div className="flex items-center gap-2 text-[#f1f3f6] text-2xl font-bold">
+                <Users size={24} className="text-[#d292f4]" />
+                {memberRows.length}
+              </div>
+              <div className="text-[#64748b] text-xs mt-2">当前项目全部协作成员。</div>
+            </div>
+
+            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+              <div className="text-[#64748b] text-sm mb-3">本机构成员</div>
+              <div className="text-[#f1f3f6] text-2xl font-bold">
+                {memberRows.filter((item) => item.memberType === '本机构成员').length}
+              </div>
+              <div className="text-[#64748b] text-xs mt-2">同机构内部协作成员。</div>
+            </div>
+
+            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+              <div className="text-[#64748b] text-sm mb-3">外部协作者</div>
+              <div className="text-[#f1f3f6] text-2xl font-bold">
+                {memberRows.filter((item) => item.memberType === '外部协作者').length}
+              </div>
+              <div className="text-[#64748b] text-xs mt-2">通过邀请码加入或待加入。</div>
+            </div>
+
+            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+              <div className="text-[#64748b] text-sm mb-3">待接受邀请</div>
+              <div className="text-[#f1f3f6] text-2xl font-bold">
+                {memberRows.filter((item) => item.status === '待接受').length}
+              </div>
+              <div className="text-[#64748b] text-xs mt-2">等待对方确认加入项目。</div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-5">
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <div>
+                <div className="text-[#f1f3f6] text-base font-semibold">成员协作规则</div>
+                <div className="text-[#64748b] text-xs mt-1">
+                  本机构成员可直接邀请加入；外部协作者建议通过邀请码加入，并默认使用较低权限。
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowInviteMemberModal(true)}
+                  className="h-9 px-4 rounded-md bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all inline-flex items-center gap-2"
+                >
+                  <Plus size={16} />
+                  邀请本机构成员
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowInviteCodeModal(true)}
+                  className="h-9 px-4 rounded-md border border-[#8f35b7]/35 bg-[#8f35b7]/10 text-[#d292f4] text-sm font-medium hover:bg-[#8f35b7]/18 transition-all"
+                >
+                  生成邀请码
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 gap-3">
+              {[
+                ['项目所有者', '全部权限，不能被移除'],
+                ['项目管理员', '可管理成员、数据和分析'],
+                ['研究员', '可添加数据并发起分析'],
+                ['观察者', '只读查看项目和结果'],
+              ].map(([role, desc]) => (
+                <div key={role} className="rounded-xl border border-white/[0.08] bg-[#17181d] p-4">
+                  <div className="text-[#f1f3f6] text-sm font-semibold">{role}</div>
+                  <div className="text-[#64748b] text-xs leading-5 mt-2">{desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/[0.08] bg-[#202126] overflow-hidden">
+            <div className="h-16 px-4 border-b border-white/[0.06] flex items-center justify-between gap-4">
+              <div>
+                <div className="text-[#f1f3f6] text-base font-semibold">项目成员列表</div>
+                <div className="text-[#64748b] text-xs mt-0.5">
+                  管理当前研究项目成员、项目角色、加入方式和成员状态。
+                </div>
+              </div>
+
+              <div className="h-9 w-[320px] rounded-md border border-white/[0.08] bg-[#17181d] px-3 flex items-center gap-2">
+                <Search size={15} className="text-[#64748b]" />
+                <input
+                  value={memberKeyword}
+                  onChange={(event) => setMemberKeyword(event.target.value)}
+                  className="w-full bg-transparent outline-none text-sm text-[#cbd5e1] placeholder:text-[#64748b]"
+                  placeholder="搜索姓名 / 邮箱 / 机构 / 角色"
+                />
+              </div>
+            </div>
+
+            <table className="w-full table-fixed border-collapse text-sm">
+              <thead>
+                <tr className="bg-[#252730] text-[#cbd5e1]">
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '11%' }}>姓名</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '18%' }}>邮箱</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '14%' }}>所属机构</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '12%' }}>成员类型</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '12%' }}>项目角色</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '17%' }}>权限范围</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '8%' }}>状态</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '8%' }}>操作</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredMemberRows.map((member) => (
+                  <tr
+                    key={member.id}
+                    className="border-b border-white/[0.06] text-[#d1d5db] hover:bg-white/[0.025]"
+                  >
+                    <td className="h-12 px-3 text-[#e5e7eb] font-medium">{member.name}</td>
+                    <td className="h-12 px-3 font-mono text-[#94a3b8] truncate">{member.email}</td>
+                    <td className="h-12 px-3">{member.organization}</td>
+                    <td className="h-12 px-3">
+                      <span
+                        className={`h-6 px-2 rounded border text-xs inline-flex items-center ${
+                          member.memberType === '本机构成员'
+                            ? 'border-[#8f35b7]/35 bg-[#8f35b7]/15 text-[#d292f4]'
+                            : 'border-white/[0.08] bg-white/[0.05] text-[#94a3b8]'
+                        }`}
+                      >
+                        {member.memberType}
+                      </span>
+                    </td>
+                    <td className="h-12 px-3">{member.role}</td>
+                    <td className="h-12 px-3">
+                      <div className="flex flex-wrap gap-1.5 max-h-[48px] overflow-hidden">
+                        {member.permissions.slice(0, 3).map((permission) => (
+                          <span
+                            key={permission}
+                            className="h-6 px-2 rounded border border-white/[0.08] bg-white/[0.05] text-[#94a3b8] text-xs inline-flex items-center"
+                          >
+                            {permission}
+                          </span>
+                        ))}
+                        {member.permissions.length > 3 && (
+                          <span className="h-6 px-2 rounded border border-[#8f35b7]/35 bg-[#8f35b7]/10 text-[#d292f4] text-xs inline-flex items-center">
+                            +{member.permissions.length - 3}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="h-12 px-3">{renderMemberStatus(member.status)}</td>
+                    <td className="h-12 px-3">
+                      <button
+                        type="button"
+                        disabled={member.role === '项目所有者'}
+                        onClick={() => removeMember(member.id)}
+                        className={`text-sm ${
+                          member.role === '项目所有者'
+                            ? 'text-[#64748b] cursor-not-allowed'
+                            : 'text-[#fca5a5] hover:text-[#fecaca]'
+                        }`}
+                      >
+                        移除
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {filteredMemberRows.length === 0 && (
+              <div className="h-[220px] flex flex-col items-center justify-center text-center text-[#64748b]">
+                <Users size={42} className="mb-3 opacity-60" />
+                <div className="text-[#94a3b8] text-sm">暂无匹配成员</div>
+                <div className="text-[#64748b] text-xs mt-1">请调整搜索关键词。</div>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-white/[0.08] bg-[#202126] overflow-hidden">
+            <div className="h-14 px-4 border-b border-white/[0.06] flex items-center justify-between">
+              <div>
+                <div className="text-[#f1f3f6] text-base font-semibold">邀请码列表</div>
+                <div className="text-[#64748b] text-xs mt-0.5">
+                  用于邀请外部机构成员加入当前项目。建议设置有效期和使用次数。
+                </div>
+              </div>
+            </div>
+
+            <table className="w-full table-fixed border-collapse text-sm">
+              <thead>
+                <tr className="bg-[#252730] text-[#cbd5e1]">
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '14%' }}>邀请码</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '26%' }}>邀请链接</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '12%' }}>默认角色</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '10%' }}>有效期</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '10%' }}>使用次数</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '10%' }}>状态</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '10%' }}>创建时间</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '8%' }}>操作</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {inviteCodeRows.map((invite) => (
+                  <tr key={invite.id} className="border-b border-white/[0.06] text-[#d1d5db] hover:bg-white/[0.025]">
+                    <td className="h-11 px-3 font-mono text-[#e5e7eb]">{invite.code}</td>
+                    <td className="h-11 px-3 text-[#94a3b8] font-mono truncate">{invite.link}</td>
+                    <td className="h-11 px-3">{invite.defaultRole}</td>
+                    <td className="h-11 px-3">{invite.expiresIn}</td>
+                    <td className="h-11 px-3">{invite.usedCount}/{invite.usageLimit}</td>
+                    <td className="h-11 px-3">{renderInviteStatus(invite.status)}</td>
+                    <td className="h-11 px-3">{invite.createdAt}</td>
+                    <td className="h-11 px-3">
+                      <button
+                        type="button"
+                        disabled={invite.status === '已失效'}
+                        onClick={() => closeInviteCode(invite.id)}
+                        className={`text-sm ${
+                          invite.status === '已失效'
+                            ? 'text-[#64748b] cursor-not-allowed'
+                            : 'text-[#d292f4] hover:text-[#f0b7ff]'
+                        }`}
+                      >
+                        关闭
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+
       {activeTab === 'records' && (
         <div className="space-y-4">
           <div className="grid grid-cols-4 gap-4">
@@ -1081,6 +1547,186 @@ function ProjectDetail({
           </div>
         </div>
       )}
+
+
+      {showInviteMemberModal && (
+        <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
+          <div className="w-[620px] rounded-2xl border border-white/[0.08] bg-[#202126] shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden">
+            <div className="h-16 px-6 border-b border-white/[0.06] flex items-center justify-between">
+              <div>
+                <div className="text-[#f1f3f6] text-lg font-bold">邀请本机构成员</div>
+                <div className="text-[#64748b] text-xs mt-1">
+                  从本机构用户中选择成员加入当前研究项目。
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowInviteMemberModal(false)}
+                className="w-8 h-8 rounded-lg text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.06] transition-all"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-sm text-[#cbd5e1] mb-2">选择成员</label>
+                <select
+                  value={selectedInternalMemberEmail}
+                  onChange={(event) => setSelectedInternalMemberEmail(event.target.value)}
+                  className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
+                >
+                  {internalMemberOptions.map((member) => (
+                    <option key={member.email} value={member.email}>
+                      {member.name} · {member.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-[#cbd5e1] mb-2">项目角色</label>
+                <select
+                  value={internalMemberRole}
+                  onChange={(event) => setInternalMemberRole(event.target.value as Exclude<ProjectMemberRole, '项目所有者'>)}
+                  className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
+                >
+                  <option value="项目管理员">项目管理员</option>
+                  <option value="研究员">研究员</option>
+                  <option value="观察者">观察者</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm text-[#cbd5e1] mb-2">邀请说明</label>
+                <textarea
+                  value={inviteNote}
+                  onChange={(event) => setInviteNote(event.target.value)}
+                  className="w-full min-h-[80px] rounded-md border border-white/[0.08] bg-[#17181d] px-3 py-2 text-sm leading-6 text-[#e2e8f0] outline-none focus:border-[#8f35b7] resize-none"
+                  placeholder="可选，说明邀请原因或协作内容"
+                />
+              </div>
+
+              <div className="rounded-xl border border-[#8f35b7]/25 bg-[#8f35b7]/10 p-4">
+                <div className="text-[#d292f4] text-sm font-semibold mb-1">邀请规则</div>
+                <div className="text-[#94a3b8] text-xs leading-6">
+                  本机构成员在此原型中会直接加入项目。正式系统中可根据机构策略决定是否需要对方接受邀请。
+                </div>
+              </div>
+            </div>
+
+            <div className="h-16 px-6 border-t border-white/[0.06] bg-[#17181d] flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowInviteMemberModal(false)}
+                className="h-9 px-4 rounded-md border border-white/[0.08] bg-[#202126] text-[#94a3b8] text-sm hover:text-[#e2e8f0] hover:bg-white/[0.04] transition-all"
+              >
+                取消
+              </button>
+
+              <button
+                type="button"
+                onClick={addInternalMember}
+                className="h-9 px-4 rounded-md bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all"
+              >
+                确认邀请
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showInviteCodeModal && (
+        <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
+          <div className="w-[620px] rounded-2xl border border-white/[0.08] bg-[#202126] shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden">
+            <div className="h-16 px-6 border-b border-white/[0.06] flex items-center justify-between">
+              <div>
+                <div className="text-[#f1f3f6] text-lg font-bold">生成外部邀请码</div>
+                <div className="text-[#64748b] text-xs mt-1">
+                  用于邀请其他机构成员加入项目。建议默认授予观察者权限。
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowInviteCodeModal(false)}
+                className="w-8 h-8 rounded-lg text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.06] transition-all"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="block text-sm text-[#cbd5e1] mb-2">默认项目角色</label>
+                <select
+                  value={inviteDefaultRole}
+                  onChange={(event) => setInviteDefaultRole(event.target.value as Exclude<ProjectMemberRole, '项目所有者' | '项目管理员'>)}
+                  className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
+                >
+                  <option value="观察者">观察者</option>
+                  <option value="研究员">研究员</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-[#cbd5e1] mb-2">有效期</label>
+                  <select
+                    value={inviteExpiresIn}
+                    onChange={(event) => setInviteExpiresIn(event.target.value)}
+                    className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
+                  >
+                    <option value="1 天">1 天</option>
+                    <option value="7 天">7 天</option>
+                    <option value="30 天">30 天</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-[#cbd5e1] mb-2">可使用次数</label>
+                  <select
+                    value={inviteUsageLimit}
+                    onChange={(event) => setInviteUsageLimit(event.target.value)}
+                    className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
+                  >
+                    <option value="1 次">1 次</option>
+                    <option value="5 次">5 次</option>
+                    <option value="不限次数">不限次数</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[#8f35b7]/25 bg-[#8f35b7]/10 p-4">
+                <div className="text-[#d292f4] text-sm font-semibold mb-1">外部协作风险提示</div>
+                <div className="text-[#94a3b8] text-xs leading-6">
+                  邀请码可能被转发。建议限制有效期、使用次数，并默认授予观察者权限。外部协作者访问项目数据前，应确认数据授权与合规边界。
+                </div>
+              </div>
+            </div>
+
+            <div className="h-16 px-6 border-t border-white/[0.06] bg-[#17181d] flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowInviteCodeModal(false)}
+                className="h-9 px-4 rounded-md border border-white/[0.08] bg-[#202126] text-[#94a3b8] text-sm hover:text-[#e2e8f0] hover:bg-white/[0.04] transition-all"
+              >
+                取消
+              </button>
+
+              <button
+                type="button"
+                onClick={generateInviteCode}
+                className="h-9 px-4 rounded-md bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all"
+              >
+                生成邀请码
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {selectedInferenceRecord && (
         <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex justify-end">

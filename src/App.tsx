@@ -9,6 +9,7 @@ import WorkbenchCaseLibrary from './pages/WorkbenchCaseLibrary';
 import About from './pages/About';
 import WorkbenchWsiManagement from './pages/WorkbenchWsiManagement';
 import WorkbenchTaskQueue from './pages/WorkbenchTaskQueue';
+import WorkbenchTaskDetail from './pages/WorkbenchTaskDetail';
 
 import Login from './pages/Login';
 import CaseLibrary from './pages/CaseLibrary';
@@ -36,6 +37,7 @@ function App() {
   <Route path="/workbench/models" element={<WorkbenchModelManagement />} />
   <Route path="/workbench/wsi" element={<WorkbenchWsiManagement />} />
   <Route path="/workbench/tasks" element={<WorkbenchTaskQueue />} />
+  <Route path="/workbench/tasks/:taskId" element={<WorkbenchTaskDetail />} />
   <Route path="/admin" element={<AdminConsole />} />
   <Route path="/workbench/cases" element={<WorkbenchCaseLibrary />} />
 </Routes>

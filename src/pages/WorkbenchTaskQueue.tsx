@@ -147,9 +147,9 @@ export default function WorkbenchTaskQueue() {
   const successCount = initialTasks.filter((item) => item.status === '成功').length;
   const failedCount = initialTasks.filter((item) => item.status === '失败').length;
 
-  const goWorkbenchDetail = (taskId: string) => {
-    navigate(`/workbench?taskId=${encodeURIComponent(taskId)}`);
-  };
+ const goWorkbenchDetail = (taskId: string) => {
+  navigate(`/workbench/tasks/${encodeURIComponent(taskId)}`);
+};
 
   return (
     <div className="min-h-[calc(100dvh-64px)] bg-[#0f1014] text-[#f1f3f6] px-6 py-5">

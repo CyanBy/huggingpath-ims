@@ -1,7 +1,10 @@
 import { useState, type ReactNode } from 'react';
 import {
-  AlertTriangle,
   BarChart3,
+  Brain,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Building2,
   CheckCircle2,
   Plus,
@@ -12,7 +15,7 @@ import {
   X,
 } from 'lucide-react';
 
-type AdminTab = 'overview' | 'users' | 'roles' | 'organizations' | 'settings-basic' | 'settings-smtp';
+type AdminTab = 'overview' | 'users' | 'roles' | 'organizations' | 'models' | 'settings-basic' | 'settings-smtp';
 
 type ReviewStatus = '待审核' | '已通过' | '已拒绝';
 type CommonStatus = '正常' | '停用' | '异常';
@@ -41,6 +44,22 @@ type RoleRow = {
   permissions: string[];
 };
 
+type AdminModelStatus = '启用' | '停用';
+type AdminModelVisibility = '公开' | '隐藏';
+
+type AdminModelRow = {
+  id: string;
+  name: string;
+  owner: string;
+  organization: string;
+  modelType: string;
+  version: string;
+  status: AdminModelStatus;
+  visibility: AdminModelVisibility;
+  runCount: number;
+  updatedAt: string;
+};
+
 const menuItems: {
   key?: AdminTab;
   label: string;
@@ -54,6 +73,7 @@ const menuItems: {
   { key: 'users', label: '用户管理', icon: <Users size={17} /> },
   { key: 'roles', label: '角色管理', icon: <ShieldCheck size={17} /> },
   { key: 'organizations', label: '机构管理', icon: <Building2 size={17} /> },
+  { key: 'models', label: '模型管理', icon: <Brain size={17} /> },
   {
     label: '系统设置',
     icon: <Settings size={17} />,
@@ -279,6 +299,70 @@ const modelReviews = [
   },
 ];
 
+
+const initialAdminModels: AdminModelRow[] = [
+  {
+    id: 'model-001',
+    name: 'CellViT++',
+    owner: 'Zhang San',
+    organization: '仁达病理中心',
+    modelType: '细胞核分割 · 检测',
+    version: 'v1.2.0',
+    status: '启用',
+    visibility: '公开',
+    runCount: 1286,
+    updatedAt: '2026-05-20',
+  },
+  {
+    id: 'model-002',
+    name: 'TME Analyzer',
+    owner: 'Li Ming',
+    organization: 'AI Lab',
+    modelType: '肿瘤微环境分析',
+    version: 'v0.9.5',
+    status: '启用',
+    visibility: '公开',
+    runCount: 842,
+    updatedAt: '2026-05-18',
+  },
+  {
+    id: 'model-003',
+    name: 'HistoQC',
+    owner: 'Platform',
+    organization: 'HuggingPath',
+    modelType: '切片质控',
+    version: 'v2.1.0',
+    status: '启用',
+    visibility: '公开',
+    runCount: 2416,
+    updatedAt: '2026-05-12',
+  },
+  {
+    id: 'model-004',
+    name: 'ProtoMIL',
+    owner: 'Wang Yu',
+    organization: '测试机构',
+    modelType: '多示例学习',
+    version: 'v0.8.2',
+    status: '启用',
+    visibility: '隐藏',
+    runCount: 56,
+    updatedAt: '2026-05-15',
+  },
+  {
+    id: 'model-005',
+    name: 'CellViT-SAM',
+    owner: 'Liu Fang',
+    organization: '仁达病理中心',
+    modelType: '组织区域分割',
+    version: 'v0.6.1',
+    status: '停用',
+    visibility: '隐藏',
+    runCount: 37,
+    updatedAt: '2026-05-10',
+  },
+];
+
 const settingsRows = [
   { name: 'SMTP 服务状态', value: '开启', desc: '控制系统是否允许通过 SMTP 发送通知邮件。' },
   { name: 'SMTP Host', value: 'smtp.example.com', desc: '邮件服务器地址，例如 smtp.company.com。' },
@@ -342,67 +426,196 @@ function SectionTitle({
 }
 
 function OverviewPanel() {
+  const gpuRows = [
+    {
+      name: 'GPU 1',
+      model: 'NVIDIA RTX 4090',
+      usage: 72,
+      memory: '18.6 / 24 GB',
+      temperature: '64°C',
+      runningTask: 'CellViT++ · TASK-20260520-001',
+    },
+    {
+      name: 'GPU 2',
+      model: 'NVIDIA RTX 4090',
+      usage: 38,
+      memory: '9.2 / 24 GB',
+      temperature: '51°C',
+      runningTask: 'TME Analyzer · TASK-20260520-004',
+    },
+  ];
+
+  const serviceRows = [
+    {
+      name: 'Redis',
+      status: '正常' as CommonStatus,
+      desc: '缓存 / 队列状态正常',
+      metric: '内存 1.8GB · 命中率 98.6%',
+    },
+    {
+      name: 'PostgreSQL',
+      status: '正常' as CommonStatus,
+      desc: '业务数据库连接正常',
+      metric: '连接 42 / 200',
+    },
+    {
+      name: 'Object Storage',
+      status: '正常' as CommonStatus,
+      desc: 'WSI 文件存储可用',
+      metric: '已用 8.6TB / 20TB',
+    },
+    {
+      name: 'Inference Worker',
+      status: '正常' as CommonStatus,
+      desc: 'AI 推理 Worker 在线',
+      metric: '在线 6 / 6',
+    },
+  ];
+
   return (
     <>
       <SectionTitle
         title="后台总览"
-        desc="用于查看平台运行状态、资源规模、异常任务和待审核内容。"
+        desc="用于查看平台资源规模、服务器资源、GPU 负载、核心服务状态和系统运行情况。"
       />
 
       <div className="grid grid-cols-4 gap-4 mb-5">
-        {overviewStats.map((item) => (
-          <div key={item.label} className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-            <div className="text-[#64748b] text-sm mb-3">{item.label}</div>
-            <div className="text-[#f1f3f6] text-2xl font-bold">{item.value}</div>
-            <div className="text-[#64748b] text-xs mt-2">{item.desc}</div>
-          </div>
-        ))}
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+          <div className="text-[#64748b] text-sm mb-3">今日分析任务</div>
+          <div className="text-[#f1f3f6] text-2xl font-bold">246</div>
+          <div className="text-[#64748b] text-xs mt-2">今日提交的 AI 推理任务。</div>
+        </div>
+
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+          <div className="text-[#64748b] text-sm mb-3">排队任务</div>
+          <div className="text-[#f1f3f6] text-2xl font-bold">12</div>
+          <div className="text-[#64748b] text-xs mt-2">等待空闲 GPU 资源。</div>
+        </div>
+
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+          <div className="text-[#64748b] text-sm mb-3">WSI 总量</div>
+          <div className="text-[#f1f3f6] text-2xl font-bold">12,430</div>
+          <div className="text-[#64748b] text-xs mt-2">平台切片文件总数。</div>
+        </div>
+
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+          <div className="text-[#64748b] text-sm mb-3">存储占用</div>
+          <div className="text-[#f1f3f6] text-2xl font-bold">8.6 TB</div>
+          <div className="text-[#64748b] text-xs mt-2">对象存储当前占用。</div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle size={18} className="text-[#f59e0b]" />
-            <div className="text-[#f1f3f6] font-semibold">最近异常任务</div>
+      <div className="grid grid-cols-4 gap-4 mb-5">
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+          <div className="text-[#64748b] text-sm mb-3">CPU 型号</div>
+          <div className="text-[#f1f3f6] text-lg font-bold leading-6">Intel Xeon Silver 4314</div>
+          <div className="text-[#64748b] text-xs mt-2">16 Core / 32 Thread</div>
+        </div>
+
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+          <div className="text-[#64748b] text-sm mb-3">CPU 频率</div>
+          <div className="text-[#f1f3f6] text-2xl font-bold">2.80 GHz</div>
+          <div className="text-[#64748b] text-xs mt-2">当前平均频率，负载 46%。</div>
+        </div>
+
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+          <div className="text-[#64748b] text-sm mb-3">系统内存</div>
+          <div className="text-[#f1f3f6] text-2xl font-bold">86 / 256 GB</div>
+          <div className="text-[#64748b] text-xs mt-2">当前内存占用 33.6%。</div>
+        </div>
+
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+          <div className="text-[#64748b] text-sm mb-3">服务运行时间</div>
+          <div className="text-[#f1f3f6] text-2xl font-bold">18d 06h</div>
+          <div className="text-[#64748b] text-xs mt-2">最近一次重启：2026-05-02。</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-[1fr_0.85fr] gap-4">
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] overflow-hidden">
+          <div className="h-14 px-5 border-b border-white/[0.06] flex items-center justify-between">
+            <div>
+              <div className="text-[#f1f3f6] text-base font-semibold">GPU 资源占用</div>
+              <div className="text-[#64748b] text-xs mt-0.5">
+                展示当前推理服务器 GPU 使用率、显存占用、温度与运行任务。
+              </div>
+            </div>
+
+            <span className="h-7 px-3 rounded-full border border-[#3f6212] bg-[#3f6212]/35 text-[#84cc16] text-xs inline-flex items-center">
+              2 / 2 在线
+            </span>
           </div>
 
-          <div className="space-y-3">
-            {[
-              ['TASK-20260520-003', '模型权重文件不存在', '异常'],
-              ['TASK-20260520-006', 'WSI 文件读取异常', '异常'],
-              ['TASK-20260519-011', '推理超时', '异常'],
-            ].map(([id, reason, status]) => (
-              <div key={id} className="rounded-lg border border-white/[0.06] bg-[#17181d] p-3 flex items-center justify-between">
-                <div>
-                  <div className="text-[#e2e8f0] text-sm font-mono">{id}</div>
-                  <div className="text-[#64748b] text-xs mt-1">{reason}</div>
+          <div className="p-5 space-y-4">
+            {gpuRows.map((gpu) => (
+              <div key={gpu.name} className="rounded-xl border border-white/[0.08] bg-[#17181d] p-4">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div>
+                    <div className="text-[#f1f3f6] text-sm font-semibold">
+                      {gpu.name} · {gpu.model}
+                    </div>
+                    <div className="text-[#64748b] text-xs mt-1">{gpu.runningTask}</div>
+                  </div>
+
+                  <div className="text-right">
+                    <div className="text-[#f1f3f6] text-lg font-bold">{gpu.usage}%</div>
+                    <div className="text-[#64748b] text-xs mt-1">GPU 使用率</div>
+                  </div>
                 </div>
-                <StatusBadge status={status as CommonStatus} />
+
+                <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden mb-3">
+                  <div
+                    className="h-full rounded-full bg-[#8f35b7]"
+                    style={{ width: `${gpu.usage}%` }}
+                  />
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 text-sm">
+                  <div className="rounded-lg border border-white/[0.06] bg-[#202126] p-3">
+                    <div className="text-[#64748b] text-xs mb-1">显存</div>
+                    <div className="text-[#e2e8f0] font-medium">{gpu.memory}</div>
+                  </div>
+
+                  <div className="rounded-lg border border-white/[0.06] bg-[#202126] p-3">
+                    <div className="text-[#64748b] text-xs mb-1">温度</div>
+                    <div className="text-[#e2e8f0] font-medium">{gpu.temperature}</div>
+                  </div>
+
+                  <div className="rounded-lg border border-white/[0.06] bg-[#202126] p-3">
+                    <div className="text-[#64748b] text-xs mb-1">状态</div>
+                    <div className="text-[#84cc16] font-medium">运行中</div>
+                  </div>
+                </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <ShieldCheck size={18} className="text-[#d292f4]" />
-            <div className="text-[#f1f3f6] font-semibold">待审核模型</div>
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] overflow-hidden">
+          <div className="h-14 px-5 border-b border-white/[0.06] flex items-center">
+            <div>
+              <div className="text-[#f1f3f6] text-base font-semibold">核心服务状态</div>
+              <div className="text-[#64748b] text-xs mt-0.5">
+                Redis、数据库、存储与推理 Worker 状态。
+              </div>
+            </div>
           </div>
 
-          <div className="space-y-3">
-            {modelReviews
-              .filter((item) => item.status === '待审核')
-              .map((item) => (
-                <div key={item.name} className="rounded-lg border border-white/[0.06] bg-[#17181d] p-3 flex items-center justify-between">
-                  <div>
-                    <div className="text-[#e2e8f0] text-sm font-semibold">{item.name}</div>
-                    <div className="text-[#64748b] text-xs mt-1">
-                      {item.submitter} · {item.organization}
-                    </div>
-                  </div>
-                  <StatusBadge status={item.status} />
+          <div className="p-5 space-y-3">
+            {serviceRows.map((service) => (
+              <div
+                key={service.name}
+                className="rounded-xl border border-white/[0.08] bg-[#17181d] p-4 flex items-center justify-between gap-4"
+              >
+                <div>
+                  <div className="text-[#f1f3f6] text-sm font-semibold">{service.name}</div>
+                  <div className="text-[#64748b] text-xs mt-1">{service.desc}</div>
+                  <div className="text-[#94a3b8] text-xs mt-2">{service.metric}</div>
                 </div>
-              ))}
+
+                <StatusBadge status={service.status} />
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -1424,6 +1637,265 @@ function OrganizationsPanel() {
 }
 
 
+
+function ModelStatusBadge({ status }: { status: AdminModelStatus }) {
+  const className =
+    status === '启用'
+      ? 'border-[#3f6212] bg-[#3f6212]/35 text-[#84cc16]'
+      : 'border-white/[0.08] bg-white/[0.05] text-[#94a3b8]';
+
+  return (
+    <span className={`h-6 px-2 rounded border text-xs inline-flex items-center ${className}`}>
+      {status}
+    </span>
+  );
+}
+
+function ModelVisibilityBadge({ visibility }: { visibility: AdminModelVisibility }) {
+  const className =
+    visibility === '公开'
+      ? 'border-[#8f35b7]/40 bg-[#8f35b7]/20 text-[#d292f4]'
+      : 'border-white/[0.08] bg-white/[0.05] text-[#94a3b8]';
+
+  return (
+    <span className={`h-6 px-2 rounded border text-xs inline-flex items-center ${className}`}>
+      {visibility}
+    </span>
+  );
+}
+
+function ModelManagementPanel() {
+  const [models, setModels] = useState<AdminModelRow[]>(initialAdminModels);
+  const [keyword, setKeyword] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'全部' | AdminModelStatus>('全部');
+  const [visibilityFilter, setVisibilityFilter] = useState<'全部' | AdminModelVisibility>('全部');
+
+  const filteredModels = models.filter((model) => {
+    const keywordMatched = keyword.trim()
+      ? `${model.name} ${model.owner} ${model.organization} ${model.modelType}`.toLowerCase().includes(keyword.trim().toLowerCase())
+      : true;
+
+    const statusMatched = statusFilter === '全部' || model.status === statusFilter;
+    const visibilityMatched = visibilityFilter === '全部' || model.visibility === visibilityFilter;
+
+    return keywordMatched && statusMatched && visibilityMatched;
+  });
+
+  const updateModelStatus = (id: string, status: AdminModelStatus) => {
+    setModels((prev) =>
+      prev.map((model) =>
+        model.id === id
+          ? {
+              ...model,
+              status,
+              updatedAt: '2026-05-20',
+            }
+          : model
+      )
+    );
+  };
+
+  const updateModelVisibility = (id: string, visibility: AdminModelVisibility) => {
+    setModels((prev) =>
+      prev.map((model) =>
+        model.id === id
+          ? {
+              ...model,
+              visibility,
+              updatedAt: '2026-05-20',
+            }
+          : model
+      )
+    );
+  };
+
+  const deleteModel = (id: string) => {
+    setModels((prev) => prev.filter((model) => model.id !== id));
+  };
+
+  const createMockModel = () => {
+    const nextIndex = models.length + 1;
+
+    const nextModel: AdminModelRow = {
+      id: `model-${Date.now()}`,
+      name: `New Pathology Model ${String(nextIndex).padStart(2, '0')}`,
+      owner: 'Admin',
+      organization: 'HuggingPath',
+      modelType: '病理 AI 分析',
+      version: 'v0.1.0',
+      status: '启用',
+      visibility: '隐藏',
+      runCount: 0,
+      updatedAt: '2026-05-20',
+    };
+
+    setModels((prev) => [nextModel, ...prev]);
+  };
+
+  return (
+    <>
+      <SectionTitle
+        title="模型管理"
+        desc="后台统一管理平台内模型资源，包括启用状态、公开展示、编辑和删除等操作。"
+      />
+
+      <div className="grid grid-cols-4 gap-4 mb-5">
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+          <div className="text-[#64748b] text-sm mb-3">模型总数</div>
+          <div className="text-[#f1f3f6] text-2xl font-bold">{models.length}</div>
+          <div className="text-[#64748b] text-xs mt-2">平台模型与用户模型合计。</div>
+        </div>
+
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+          <div className="text-[#64748b] text-sm mb-3">公开模型</div>
+          <div className="text-[#f1f3f6] text-2xl font-bold">
+            {models.filter((item) => item.visibility === '公开').length}
+          </div>
+          <div className="text-[#64748b] text-xs mt-2">会展示到模型中心。</div>
+        </div>
+
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+          <div className="text-[#64748b] text-sm mb-3">停用模型</div>
+          <div className="text-[#f1f3f6] text-2xl font-bold">
+            {models.filter((item) => item.status === '停用').length}
+          </div>
+          <div className="text-[#64748b] text-xs mt-2">停用后不可被运行。</div>
+        </div>
+
+        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+          <div className="text-[#64748b] text-sm mb-3">累计运行</div>
+          <div className="text-[#f1f3f6] text-2xl font-bold">
+            {models.reduce((total, item) => total + item.runCount, 0).toLocaleString()}
+          </div>
+          <div className="text-[#64748b] text-xs mt-2">所有模型累计调用次数。</div>
+        </div>
+      </div>
+
+      <div className="mb-4 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-2">
+          <div className="h-9 w-[320px] rounded-md border border-white/[0.08] bg-[#17181d] px-3 flex items-center gap-2">
+            <Search size={15} className="text-[#64748b]" />
+            <input
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              className="w-full bg-transparent outline-none text-sm text-[#cbd5e1] placeholder:text-[#64748b]"
+              placeholder="搜索模型名 / 创建人 / 机构 / 类型"
+            />
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as '全部' | AdminModelStatus)}
+            className="h-9 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#cbd5e1] outline-none focus:border-[#8f35b7]"
+          >
+            <option value="全部">全部状态</option>
+            <option value="启用">启用</option>
+            <option value="停用">停用</option>
+          </select>
+
+          <select
+            value={visibilityFilter}
+            onChange={(event) => setVisibilityFilter(event.target.value as '全部' | AdminModelVisibility)}
+            className="h-9 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#cbd5e1] outline-none focus:border-[#8f35b7]"
+          >
+            <option value="全部">全部可见性</option>
+            <option value="公开">公开</option>
+            <option value="隐藏">隐藏</option>
+          </select>
+        </div>
+
+        <button
+          type="button"
+          onClick={createMockModel}
+          className="h-9 px-4 rounded-md bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all inline-flex items-center gap-2"
+        >
+          <Plus size={16} />
+          新增模型
+        </button>
+      </div>
+
+      <div className="mb-3 text-[#64748b] text-xs">
+        当前共 {models.length} 个模型，筛选结果 {filteredModels.length} 条
+      </div>
+
+      <div className="rounded-xl border border-white/[0.08] bg-[#202126] overflow-hidden">
+        <table className="w-full table-fixed text-sm">
+          <thead>
+            <tr className="bg-[#252730] text-[#cbd5e1]">
+              <th className="h-11 px-3 text-left" style={{ width: '14%' }}>模型名称</th>
+              <th className="h-11 px-3 text-left" style={{ width: '10%' }}>创建人</th>
+              <th className="h-11 px-3 text-left" style={{ width: '13%' }}>所属机构</th>
+              <th className="h-11 px-3 text-left" style={{ width: '15%' }}>模型类型</th>
+              <th className="h-11 px-3 text-left" style={{ width: '8%' }}>版本</th>
+              <th className="h-11 px-3 text-left" style={{ width: '9%' }}>状态</th>
+              <th className="h-11 px-3 text-left" style={{ width: '9%' }}>可见性</th>
+              <th className="h-11 px-3 text-left" style={{ width: '8%' }}>运行次数</th>
+              <th className="h-11 px-3 text-left" style={{ width: '14%' }}>操作</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {filteredModels.map((model) => (
+              <tr key={model.id} className="border-b border-white/[0.06] text-[#d1d5db] hover:bg-white/[0.025]">
+                <td className="h-12 px-3 text-[#e2e8f0] font-medium">{model.name}</td>
+                <td className="h-12 px-3">{model.owner}</td>
+                <td className="h-12 px-3">{model.organization}</td>
+                <td className="h-12 px-3">{model.modelType}</td>
+                <td className="h-12 px-3 font-mono">{model.version}</td>
+                <td className="h-12 px-3"><ModelStatusBadge status={model.status} /></td>
+                <td className="h-12 px-3"><ModelVisibilityBadge visibility={model.visibility} /></td>
+                <td className="h-12 px-3">{model.runCount.toLocaleString()}</td>
+                <td className="h-12 px-3">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <button
+                      type="button"
+                      onClick={() => updateModelStatus(model.id, model.status === '启用' ? '停用' : '启用')}
+                      className={model.status === '启用' ? 'text-[#fca5a5] hover:text-[#fecaca]' : 'text-[#84cc16] hover:text-[#bef264]'}
+                    >
+                      {model.status === '启用' ? '停用' : '启用'}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => updateModelVisibility(model.id, model.visibility === '公开' ? '隐藏' : '公开')}
+                      className={model.visibility === '公开' ? 'text-[#94a3b8] hover:text-[#e2e8f0]' : 'text-[#d292f4] hover:text-[#f0b7ff]'}
+                    >
+                      {model.visibility === '公开' ? '隐藏' : '公开'}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="text-[#d292f4] hover:text-[#f0b7ff]"
+                    >
+                      编辑
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteModel(model.id)}
+                      className="text-[#fca5a5] hover:text-[#fecaca]"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {filteredModels.length === 0 && (
+          <div className="h-[220px] flex flex-col items-center justify-center text-center text-[#64748b]">
+            <Brain size={42} className="mb-3 opacity-60" />
+            <div className="text-[#94a3b8] text-sm">暂无匹配模型</div>
+            <div className="text-[#64748b] text-xs mt-1">请调整搜索条件。</div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
 function BasicSettingsPanel() {
   const [guestAnalysisLimit, setGuestAnalysisLimit] = useState('3');
   const [maxWsiSize, setMaxWsiSize] = useState('5');
@@ -1545,7 +2017,17 @@ function BasicSettingsPanel() {
               </select>
             </div>
 
-          
+            <div>
+              <label className="block text-sm text-[#cbd5e1] mb-2">上传后人工审核</label>
+              <select
+                value={uploadReview}
+                onChange={(event) => setUploadReview(event.target.value)}
+                className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
+              >
+                <option value="开启">开启</option>
+                <option value="关闭">关闭</option>
+              </select>
+            </div>
 
             <div>
               <label className="block text-sm text-[#cbd5e1] mb-2">
@@ -1832,6 +2314,8 @@ function SmtpSettingsPanel() {
 
 export default function AdminConsole() {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [settingsExpanded, setSettingsExpanded] = useState(true);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -1843,6 +2327,8 @@ export default function AdminConsole() {
         return <RolesPanel />;
       case 'organizations':
         return <OrganizationsPanel />;
+      case 'models':
+        return <ModelManagementPanel />;
       case 'settings-basic':
         return <BasicSettingsPanel />;
       case 'settings-smtp':
@@ -1854,10 +2340,27 @@ export default function AdminConsole() {
 
   return (
     <div className="min-h-[calc(100dvh-64px)] bg-[#0f1014] text-[#f1f3f6] flex">
-      <aside className="w-[240px] shrink-0 border-r border-white/[0.08] bg-[#17181d] px-3 py-4">
-        <div className="px-3 mb-5">
-          <div className="text-[#f8fafc] text-lg font-bold">后台管理</div>
-          <div className="text-[#64748b] text-xs mt-1">Admin Console</div>
+      <aside
+        className={`shrink-0 border-r border-white/[0.08] bg-[#17181d] px-3 py-4 transition-all duration-200 ${
+          sidebarCollapsed ? 'w-[76px]' : 'w-[240px]'
+        }`}
+      >
+        <div className={`mb-5 flex items-center ${sidebarCollapsed ? 'justify-center' : 'justify-between px-3'}`}>
+          {!sidebarCollapsed && (
+            <div>
+              <div className="text-[#f8fafc] text-lg font-bold">后台管理</div>
+              <div className="text-[#64748b] text-xs mt-1">Admin Console</div>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setSidebarCollapsed((prev) => !prev)}
+            className="w-9 h-9 rounded-lg border border-white/[0.08] bg-[#202126] text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.04] transition-all inline-flex items-center justify-center"
+            title={sidebarCollapsed ? '展开菜单' : '收起菜单'}
+          >
+            {sidebarCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
+          </button>
         </div>
 
         <div className="space-y-1">
@@ -1870,37 +2373,58 @@ export default function AdminConsole() {
             if (hasChildren) {
               return (
                 <div key={item.label}>
-                  <div
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (sidebarCollapsed) {
+                        const firstChild = item.children?.[0]?.key;
+                        if (firstChild) setActiveTab(firstChild);
+                        return;
+                      }
+
+                      setSettingsExpanded((prev) => !prev);
+                    }}
                     className={`w-full h-10 rounded-lg px-3 flex items-center gap-3 text-sm border transition-all ${
                       isParentActive
                         ? 'bg-[#8f35b7]/12 text-[#d292f4] border-[#8f35b7]/25'
-                        : 'text-[#94a3b8] border-transparent'
-                    }`}
+                        : 'text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.04] border-transparent'
+                    } ${sidebarCollapsed ? 'justify-center' : ''}`}
+                    title={sidebarCollapsed ? item.label : undefined}
                   >
                     {item.icon}
-                    <span>{item.label}</span>
-                  </div>
+                    {!sidebarCollapsed && (
+                      <>
+                        <span className="flex-1 text-left">{item.label}</span>
+                        <ChevronDown
+                          size={15}
+                          className={`transition-transform ${settingsExpanded ? 'rotate-180' : ''}`}
+                        />
+                      </>
+                    )}
+                  </button>
 
-                  <div className="ml-6 mt-1 space-y-1 border-l border-white/[0.08] pl-3">
-                    {item.children?.map((child) => {
-                      const childActive = activeTab === child.key;
+                  {!sidebarCollapsed && settingsExpanded && (
+                    <div className="ml-6 mt-1 space-y-1 border-l border-white/[0.08] pl-3">
+                      {item.children?.map((child) => {
+                        const childActive = activeTab === child.key;
 
-                      return (
-                        <button
-                          key={child.key}
-                          type="button"
-                          onClick={() => setActiveTab(child.key)}
-                          className={`w-full h-8 rounded-md px-3 flex items-center text-left text-xs transition-all ${
-                            childActive
-                              ? 'bg-[#8f35b7]/20 text-[#d292f4] border border-[#8f35b7]/35'
-                              : 'text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.04] border border-transparent'
-                          }`}
-                        >
-                          {child.label}
-                        </button>
-                      );
-                    })}
-                  </div>
+                        return (
+                          <button
+                            key={child.key}
+                            type="button"
+                            onClick={() => setActiveTab(child.key)}
+                            className={`w-full h-8 rounded-md px-3 flex items-center text-left text-xs transition-all ${
+                              childActive
+                                ? 'bg-[#8f35b7]/20 text-[#d292f4] border border-[#8f35b7]/35'
+                                : 'text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.04] border border-transparent'
+                            }`}
+                          >
+                            {child.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             }
@@ -1914,21 +2438,24 @@ export default function AdminConsole() {
                   isActive
                     ? 'bg-[#8f35b7]/20 text-[#d292f4] border border-[#8f35b7]/35'
                     : 'text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.04] border border-transparent'
-                }`}
+                } ${sidebarCollapsed ? 'justify-center' : ''}`}
+                title={sidebarCollapsed ? item.label : undefined}
               >
                 {item.icon}
-                <span>{item.label}</span>
+                {!sidebarCollapsed && <span>{item.label}</span>}
               </button>
             );
           })}
         </div>
 
-        <div className="mt-6 rounded-xl border border-[#8f35b7]/25 bg-[#8f35b7]/10 p-3">
-          <div className="text-[#d292f4] text-xs font-semibold mb-1">权限说明</div>
-          <div className="text-[#94a3b8] text-xs leading-5">
-            当前为后台管理原型页面，暂不接真实权限与接口。
+        {!sidebarCollapsed && (
+          <div className="mt-6 rounded-xl border border-[#8f35b7]/25 bg-[#8f35b7]/10 p-3">
+            <div className="text-[#d292f4] text-xs font-semibold mb-1">权限说明</div>
+            <div className="text-[#94a3b8] text-xs leading-5">
+              当前为后台管理原型页面，暂不接真实权限与接口。
+            </div>
           </div>
-        </div>
+        )}
       </aside>
 
       <main className="flex-1 min-w-0 px-6 py-5 overflow-auto">
