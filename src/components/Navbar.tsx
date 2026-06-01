@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Routes, Route, Navigate } from 'react-router-dom';
 import {
   Search,
   Github,
@@ -22,10 +21,12 @@ const navLinks = [
 ];
 
 const workbenchLinks = [
-  { label: '分析队列', path: '/workbench' },
-  { label: 'Case 管理', path: '/workbench/cases' },
   { label: '研究项目管理', path: '/workbench/projects' },
   { label: '模型管理', path: '/workbench/models' },
+  { label: 'WSI 管理', path: '/workbench/wsi' },
+  { label: 'Case 管理', path: '/workbench/cases' },
+  { label: '分析队列', path: '/workbench/tasks' },
+  { label: 'AI 工作台', path: '/workbench' },
 ];
 
 export default function Navbar() {

@@ -52,6 +52,26 @@ type ProjectInferenceRow = {
   duration: string;
 };
 
+type AnalysisVersionStatus = '分析中' | '分析失败' | '分析完成';
+
+type AnalysisVersion = {
+  id: string;
+  time: string;
+  title: string;
+  status: AnalysisVersionStatus;
+  description: string;
+  wsiCount: number;
+  aiFindingCount: number;
+  detectedNuclei: string;
+  positiveCells: string;
+  positiveRate: string;
+  tmeHotspots: number;
+  qcTips: number;
+  confidence: string;
+  summary: string;
+  inferenceRows: ProjectInferenceRow[];
+};
+
 const initialProjectInferenceRows: ProjectInferenceRow[] = [
   {
     id: 'infer-001',
@@ -161,7 +181,7 @@ const initialProjects: ResearchProject[] = [
     tags: ['乳腺', 'HER2', 'IHC'],
     caseCount: 12,
     wsiCount: 33,
-    inferenceCount: 0,
+    inferenceCount: 4,
     updatedAt: '2026-05-05',
     visibility: 'private',
   },
@@ -172,7 +192,7 @@ const initialProjects: ResearchProject[] = [
     tags: ['结直肠', 'TME', '多模态'],
     caseCount: 9,
     wsiCount: 31,
-    inferenceCount: 0,
+    inferenceCount: 3,
     updatedAt: '2026-05-10',
     visibility: 'public',
   },
@@ -183,7 +203,7 @@ const initialProjects: ResearchProject[] = [
     tags: ['肺', '核分裂', '预后'],
     caseCount: 11,
     wsiCount: 32,
-    inferenceCount: 0,
+    inferenceCount: 5,
     updatedAt: '2026-05-20',
     visibility: 'private',
   },
@@ -194,7 +214,7 @@ const initialProjects: ResearchProject[] = [
     tags: ['胃', '分类', '基线'],
     caseCount: 10,
     wsiCount: 33,
-    inferenceCount: 0,
+    inferenceCount: 2,
     updatedAt: '2026-04-23',
     visibility: 'private',
   },
@@ -271,6 +291,7 @@ function ProjectDetail({
 
   const [selectedInferenceRecord, setSelectedInferenceRecord] = useState<ProjectInferenceRow | null>(null);
   const [inferenceDrawerMode, setInferenceDrawerMode] = useState<'detail' | 'result'>('detail');
+  const [selectedAnalysisVersionId, setSelectedAnalysisVersionId] = useState('analysis-003');
 
   const tabs = [
     { key: 'overview' as const, label: '概览' },
@@ -350,6 +371,163 @@ function ProjectDetail({
     );
   };
 
+  const renderAnalysisStatus = (status: AnalysisVersionStatus) => {
+    const className =
+      status === '分析完成'
+        ? 'border-[#3f6212] bg-[#3f6212]/35 text-[#84cc16]'
+        : status === '分析中'
+          ? 'border-[#8f35b7]/40 bg-[#8f35b7]/20 text-[#d292f4]'
+          : 'border-[#991b1b] bg-[#991b1b]/30 text-[#fca5a5]';
+
+    return (
+      <span className={`h-6 px-2 rounded border text-xs inline-flex items-center ${className}`}>
+        {status}
+      </span>
+    );
+  };
+
+  const detectedNucleiCount = '18,236';
+  const positiveCellCount = '4,281';
+  const positiveRate = '23.5%';
+  const tmeHotspotCount = 8;
+
+  const inferenceSummaryItems = [
+    {
+      title: '细胞核检测 / 分割',
+      model: 'CellViT++',
+      content: `检出细胞核 ${detectedNucleiCount} 个，疑似阳性细胞 ${positiveCellCount} 个，阳性率 ${positiveRate}。`,
+      status: '分析完成',
+    },
+    {
+      title: '肿瘤微环境分析',
+      model: 'TME Analyzer',
+      content: `识别 ${tmeHotspotCount} 个免疫细胞高密度热点，提示肿瘤区与间质区分布存在空间异质性。`,
+      status: '分析完成',
+    },
+    {
+      title: '组织区域分割',
+      model: 'CellViT-SAM',
+      content: '正在生成肿瘤区、间质区与坏死样区域边界，后续可用于区域级统计。',
+      status: '运行中',
+    },
+    {
+      title: '切片质控',
+      model: 'HistoQC',
+      content: '等待检测模糊、折叠、气泡、污染与空白区域，质控结果建议作为人工复核参考。',
+      status: '排队中',
+    },
+  ];
+
+
+  const analysisVersions: AnalysisVersion[] = [
+    {
+      id: 'analysis-001',
+      time: '05-20 14:10',
+      title: '初次整体分析',
+      status: '分析完成',
+      description: '首次纳入 3 张 WSI，完成基础细胞核检测、组织区域分割和初步 TME 分析。',
+      wsiCount: 3,
+      aiFindingCount: 126,
+      detectedNuclei: '18,236',
+      positiveCells: '4,281',
+      positiveRate: '23.5%',
+      tmeHotspots: 8,
+      qcTips: 2,
+      confidence: '0.91',
+      summary: '初次分析提示疑似阳性细胞比例较高，肿瘤区域周边存在 8 个免疫细胞高密度热点，建议进入下一轮参数复跑确认。',
+      inferenceRows: initialProjectInferenceRows,
+    },
+    {
+      id: 'analysis-002',
+      time: '05-20 15:30',
+      title: '参数调整后复跑',
+      status: '分析完成',
+      description: '将置信度阈值从 0.50 调整到 0.60 后重新运行，减少低置信度细胞和边缘区域误检。',
+      wsiCount: 3,
+      aiFindingCount: 104,
+      detectedNuclei: '17,904',
+      positiveCells: '3,545',
+      positiveRate: '19.8%',
+      tmeHotspots: 6,
+      qcTips: 1,
+      confidence: '0.94',
+      summary: '复跑后疑似阳性细胞数下降，模型输出更加集中，部分低置信度边缘区域被过滤，结果更适合进入项目统计。',
+      inferenceRows: [
+        { id: 'infer-101', model: 'CellViT++', modelType: '分割 · 检测', status: '成功', queuedAt: '05-20 15:31', duration: '39.8s' },
+        { id: 'infer-102', model: 'TME Analyzer', modelType: '肿瘤微环境', status: '成功', queuedAt: '05-20 15:33', duration: '55.1s' },
+        { id: 'infer-103', model: 'CellViT-SAM', modelType: '分割', status: '成功', queuedAt: '05-20 15:35', duration: '48.4s' },
+        { id: 'infer-104', model: 'HistoQC', modelType: '切片质控', status: '成功', queuedAt: '05-20 15:36', duration: '18.6s' },
+      ],
+    },
+    {
+      id: 'analysis-003',
+      time: '05-21 09:20',
+      title: '新增 WSI 后分析',
+      status: '分析完成',
+      description: '新增 2 张 IHC / Ki67 WSI 后进行项目级整体分析，补充阳性率、热点区域和质控提示。',
+      wsiCount: 5,
+      aiFindingCount: 168,
+      detectedNuclei: '25,712',
+      positiveCells: '5,451',
+      positiveRate: '21.2%',
+      tmeHotspots: 11,
+      qcTips: 3,
+      confidence: '0.92',
+      summary: '新增切片后，AI 发现数和免疫热点数量增加，Ki67 相关区域提示需要人工复核。当前版本可作为项目阶段性结果。',
+      inferenceRows: [
+        { id: 'infer-201', model: 'CellViT++', modelType: '分割 · 检测', status: '成功', queuedAt: '05-21 09:22', duration: '52.4s' },
+        { id: 'infer-202', model: 'TME Analyzer', modelType: '肿瘤微环境', status: '成功', queuedAt: '05-21 09:24', duration: '71.2s' },
+        { id: 'infer-203', model: 'CellViT-SAM', modelType: '分割', status: '成功', queuedAt: '05-21 09:26', duration: '63.5s' },
+        { id: 'infer-204', model: 'HistoQC', modelType: '切片质控', status: '成功', queuedAt: '05-21 09:28', duration: '24.1s' },
+      ],
+    },
+    {
+      id: 'analysis-004',
+      time: '05-22 16:45',
+      title: '人工复核版本',
+      status: '分析中',
+      description: '系统已生成阶段性结果，等待研究人员对 AI 标注、热点区域和质控提示进行确认。',
+      wsiCount: 5,
+      aiFindingCount: 168,
+      detectedNuclei: '25,712',
+      positiveCells: '5,451',
+      positiveRate: '21.2%',
+      tmeHotspots: 11,
+      qcTips: 3,
+      confidence: '0.92',
+      summary: '当前版本进入人工复核阶段，AI 结果仅作为辅助提示，不等同于病理诊断结论。复核后可生成最终项目分析版本。',
+      inferenceRows: [
+        { id: 'infer-301', model: 'CellViT++', modelType: '分割 · 检测', status: '成功', queuedAt: '05-22 16:45', duration: '52.4s' },
+        { id: 'infer-302', model: 'TME Analyzer', modelType: '肿瘤微环境', status: '成功', queuedAt: '05-22 16:45', duration: '71.2s' },
+        { id: 'infer-303', model: 'CellViT-SAM', modelType: '分割', status: '成功', queuedAt: '05-22 16:46', duration: '63.5s' },
+        { id: 'infer-304', model: 'HistoQC', modelType: '切片质控', status: '排队中', queuedAt: '05-22 16:47', duration: '-' },
+      ],
+    },
+  ];
+
+  const selectedAnalysisVersion =
+    analysisVersions.find((item) => item.id === selectedAnalysisVersionId) || analysisVersions[0];
+
+  const selectedInferenceRows = selectedAnalysisVersion.inferenceRows;
+  const selectedCompletedCount = selectedInferenceRows.filter((row) => row.status === '成功').length;
+  const selectedRunningCount = selectedInferenceRows.filter((row) => row.status === '运行中').length;
+  const selectedQueuedCount = selectedInferenceRows.filter((row) => row.status === '排队中').length;
+  const selectedFailedCount = selectedInferenceRows.filter((row) => row.status === '失败').length;
+  const modelTypeStats = [
+    { label: '细胞核检测', value: 1 },
+    { label: 'TME 分析', value: 1 },
+    { label: '组织分割', value: 1 },
+    { label: '切片质控', value: 1 },
+  ];
+  const findingStats = [
+    { label: '细胞核', value: Number(selectedAnalysisVersion.detectedNuclei.replace(/,/g, '')), display: selectedAnalysisVersion.detectedNuclei },
+    { label: '阳性细胞', value: Number(selectedAnalysisVersion.positiveCells.replace(/,/g, '')), display: selectedAnalysisVersion.positiveCells },
+    { label: 'AI 区域', value: selectedAnalysisVersion.aiFindingCount, display: String(selectedAnalysisVersion.aiFindingCount) },
+    { label: '免疫热点', value: selectedAnalysisVersion.tmeHotspots, display: String(selectedAnalysisVersion.tmeHotspots) },
+    { label: '质控提示', value: selectedAnalysisVersion.qcTips, display: String(selectedAnalysisVersion.qcTips) },
+  ];
+  const maxFindingValue = Math.max(...findingStats.map((item) => item.value));
+
   return (
     <div>
       <div className="mb-6">
@@ -376,40 +554,6 @@ function ProjectDetail({
         <p className="text-sm text-[#94a3b8] leading-6 mt-2 max-w-[920px]">
           {editableDescription}
         </p>
-      </div>
-
-      <div className="grid grid-cols-4 gap-4 mb-6">
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-          <div className="text-[#64748b] text-sm mb-3">Case 数</div>
-          <div className="flex items-center gap-2 text-[#f1f3f6] text-2xl font-bold">
-            <FolderOpen size={25} className="text-[#d292f4]" />
-            {caseRows.length}
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-          <div className="text-[#64748b] text-sm mb-3">WSI 数</div>
-          <div className="flex items-center gap-2 text-[#f1f3f6] text-2xl font-bold">
-            <FileText size={25} className="text-[#d292f4]" />
-            {wsiRows.length}
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-          <div className="text-[#64748b] text-sm mb-3">推理任务</div>
-          <div className="flex items-center gap-2 text-[#f1f3f6] text-2xl font-bold">
-            <FlaskConical size={25} className="text-[#d292f4]" />
-            {inferenceRows.length}
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-          <div className="text-[#64748b] text-sm mb-3">成员</div>
-          <div className="flex items-center gap-2 text-[#f1f3f6] text-2xl font-bold">
-            <Users size={25} className="text-[#d292f4]" />
-            8
-          </div>
-        </div>
       </div>
 
       <div className="border-b border-white/[0.08] mb-4">
@@ -633,56 +777,308 @@ function ProjectDetail({
       )}
 
       {activeTab === 'records' && (
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] overflow-hidden">
-          <div className="h-14 px-4 border-b border-white/[0.06] flex items-center justify-between">
-            <div>
-              <div className="text-[#f1f3f6] text-base font-semibold">AI 推理记录</div>
-              <div className="text-[#64748b] text-xs mt-0.5">
-                展示该研究项目下已提交的 AI 分析模型、执行状态、排队时间与耗时。
+        <div className="space-y-4">
+          <div className="grid grid-cols-4 gap-4">
+            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+              <div className="text-[#64748b] text-sm mb-3">当前分析版本</div>
+              <div className="text-[#f1f3f6] text-xl font-bold truncate">{selectedAnalysisVersion.title}</div>
+              <div className="text-[#64748b] text-xs mt-2">{selectedAnalysisVersion.time}</div>
+            </div>
+
+            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+              <div className="text-[#64748b] text-sm mb-3">分析 WSI 数</div>
+              <div className="text-[#f1f3f6] text-2xl font-bold">{selectedAnalysisVersion.wsiCount}</div>
+              <div className="text-[#64748b] text-xs mt-2">当前时间点纳入分析的切片数。</div>
+            </div>
+
+            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+              <div className="text-[#64748b] text-sm mb-3">AI 发现数</div>
+              <div className="text-[#f1f3f6] text-2xl font-bold">{selectedAnalysisVersion.aiFindingCount}</div>
+              <div className="text-[#64748b] text-xs mt-2">区域、热点、质控提示等聚合发现。</div>
+            </div>
+
+            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
+              <div className="text-[#64748b] text-sm mb-3">分析状态</div>
+              <div>{renderAnalysisStatus(selectedAnalysisVersion.status)}</div>
+              <div className="text-[#64748b] text-xs mt-2">
+                成功 {selectedCompletedCount} · 运行中 {selectedRunningCount} · 排队中 {selectedQueuedCount} · 失败 {selectedFailedCount}
               </div>
             </div>
           </div>
 
-          <table className="w-full table-fixed border-collapse text-sm">
-            <thead>
-              <tr className="bg-[#252730] text-[#cbd5e1]">
-                <th className="h-11 px-3 text-left font-semibold" style={{ width: '22%' }}>模型</th>
-                <th className="h-11 px-3 text-left font-semibold" style={{ width: '22%' }}>类型</th>
-                <th className="h-11 px-3 text-left font-semibold" style={{ width: '16%' }}>状态</th>
-                <th className="h-11 px-3 text-left font-semibold" style={{ width: '18%' }}>排队时间</th>
-                <th className="h-11 px-3 text-left font-semibold" style={{ width: '12%' }}>耗时</th>
-                <th className="h-11 px-3 text-left font-semibold" style={{ width: '10%' }}>操作</th>
-              </tr>
-            </thead>
+          <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-5">
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <div>
+                <div className="text-[#f1f3f6] text-base font-semibold">项目分析时间轴</div>
+                <div className="text-[#64748b] text-xs mt-1">
+                  按项目级整体分析版本排列。点击时间点后，下方图表、摘要和推理记录会切换到该时间点的分析结果。
+                </div>
+              </div>
 
-            <tbody>
-              {inferenceRows.map((row) => (
-                <tr
-                  key={row.id}
-                  className="border-b border-white/[0.06] text-[#d1d5db] hover:bg-white/[0.025]"
-                >
-                  <td className="h-11 px-3 text-[#e5e7eb] font-medium">{row.model}</td>
-                  <td className="h-11 px-3">
-                    <span className="h-6 px-2 rounded border border-white/[0.08] bg-white/[0.05] text-[#94a3b8] text-xs inline-flex items-center">
-                      {row.modelType}
-                    </span>
-                  </td>
-                  <td className="h-11 px-3">{renderInferenceStatus(row.status)}</td>
-                  <td className="h-11 px-3">{row.queuedAt}</td>
-                  <td className="h-11 px-3">{row.duration}</td>
-                  <td className="h-11 px-3">
+              <span className="h-7 px-3 rounded-full border border-[#8f35b7]/35 bg-[#8f35b7]/15 text-[#d292f4] text-xs inline-flex items-center">
+                当前：{selectedAnalysisVersion.status}
+              </span>
+            </div>
+
+            <div className="relative px-2 pb-1">
+              <div className="absolute left-8 right-8 top-[18px] h-px bg-white/[0.08]" />
+              <div className="grid grid-cols-4 gap-4 relative">
+                {analysisVersions.map((version) => {
+                  const isSelected = selectedAnalysisVersion.id === version.id;
+
+                  return (
                     <button
+                      key={version.id}
                       type="button"
-                      onClick={() => openInferenceDetail(row)}
-                      className="text-[#d292f4] hover:text-[#f0b7ff] text-sm"
+                      onClick={() => setSelectedAnalysisVersionId(version.id)}
+                      className={`relative text-left rounded-xl border p-4 transition-all ${
+                        isSelected
+                          ? 'border-[#8f35b7]/55 bg-[#8f35b7]/15 shadow-[0_0_0_1px_rgba(143,53,183,0.15)]'
+                          : 'border-white/[0.08] bg-[#17181d] hover:border-[#8f35b7]/35 hover:bg-[#1f2024]'
+                      }`}
                     >
-                      详情
+                      <div
+                        className={`absolute -top-[2px] left-4 w-4 h-4 rounded-full border-2 ${
+                          isSelected
+                            ? 'border-[#d292f4] bg-[#8f35b7]'
+                            : version.status === '分析完成'
+                              ? 'border-[#84cc16] bg-[#3f6212]'
+                              : version.status === '分析中'
+                                ? 'border-[#d292f4] bg-[#8f35b7]'
+                                : 'border-[#fca5a5] bg-[#991b1b]'
+                        }`}
+                      />
+
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <div className="text-[#d292f4] text-xs font-mono">{version.time}</div>
+                        {renderAnalysisStatus(version.status)}
+                      </div>
+
+                
+                     
                     </button>
-                  </td>
-                </tr>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-5">
+              <div className="text-[#f1f3f6] text-base font-semibold mb-1">任务状态分布</div>
+              <div className="text-[#64748b] text-xs mb-5">当前时间点下模型执行状态。</div>
+
+              <div className="flex items-center gap-5">
+                <div className="relative w-[132px] h-[132px] rounded-full bg-[#17181d] border border-white/[0.08] flex items-center justify-center">
+                  <div className="absolute inset-3 rounded-full border-[12px] border-[#8f35b7]/60" />
+                  <div className="absolute inset-3 rounded-full border-[12px] border-t-[#84cc16] border-r-[#84cc16] border-b-transparent border-l-transparent rotate-45" />
+                  <div className="w-[72px] h-[72px] rounded-full bg-[#202126] border border-white/[0.08] flex flex-col items-center justify-center z-10">
+                    <div className="text-[#f1f3f6] text-xl font-bold">{selectedInferenceRows.length}</div>
+                    <div className="text-[#64748b] text-xs">任务</div>
+                  </div>
+                </div>
+
+                <div className="flex-1 space-y-3 text-sm">
+                  {[
+                    ['成功', selectedCompletedCount, 'bg-[#84cc16]'],
+                    ['运行中', selectedRunningCount, 'bg-[#d292f4]'],
+                    ['排队中', selectedQueuedCount, 'bg-[#64748b]'],
+                    ['失败', selectedFailedCount, 'bg-[#fca5a5]'],
+                  ].map(([label, value, dotClass]) => (
+                    <div key={label as string} className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-[#94a3b8]">
+                        <span className={`w-2 h-2 rounded-full ${dotClass}`} />
+                        {label as string}
+                      </div>
+                      <div className="text-[#e2e8f0] font-medium">{value as number}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-5">
+              <div className="text-[#f1f3f6] text-base font-semibold mb-1">模型类型使用分布</div>
+              <div className="text-[#64748b] text-xs mb-5">当前版本使用的模型能力组合。</div>
+
+              <div className="space-y-4">
+                {modelTypeStats.map((item) => (
+                  <div key={item.label}>
+                    <div className="flex items-center justify-between text-sm mb-1.5">
+                      <span className="text-[#94a3b8]">{item.label}</span>
+                      <span className="text-[#e2e8f0]">{item.value}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+                      <div className="h-full rounded-full bg-[#8f35b7]" style={{ width: `${item.value * 25}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-5">
+              <div className="text-[#f1f3f6] text-base font-semibold mb-1">关键发现分布</div>
+              <div className="text-[#64748b] text-xs mb-5">当前时间点聚合的 AI 发现结构。</div>
+
+              <div className="space-y-3">
+                {findingStats.map((item) => (
+                  <div key={item.label}>
+                    <div className="flex items-center justify-between text-sm mb-1.5">
+                      <span className="text-[#94a3b8]">{item.label}</span>
+                      <span className="text-[#e2e8f0] font-medium">{item.display}</span>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-[#d292f4]"
+                        style={{ width: `${Math.max((item.value / maxFindingValue) * 100, 4)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-5">
+              <div className="text-[#f1f3f6] text-base font-semibold mb-1">当前版本结果快照</div>
+              <div className="text-[#64748b] text-xs mb-5">点击时间轴后，此处同步切换。</div>
+
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
+                  <div className="text-[#64748b] mb-1">细胞核</div>
+                  <div className="text-[#e2e8f0] text-lg font-bold">{selectedAnalysisVersion.detectedNuclei}</div>
+                </div>
+                <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
+                  <div className="text-[#64748b] mb-1">阳性细胞</div>
+                  <div className="text-[#e2e8f0] text-lg font-bold">{selectedAnalysisVersion.positiveCells}</div>
+                </div>
+                <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
+                  <div className="text-[#64748b] mb-1">阳性率</div>
+                  <div className="text-[#e2e8f0] text-lg font-bold">{selectedAnalysisVersion.positiveRate}</div>
+                </div>
+                <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
+                  <div className="text-[#64748b] mb-1">平均置信度</div>
+                  <div className="text-[#e2e8f0] text-lg font-bold">{selectedAnalysisVersion.confidence}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-5">
+            <div className="flex items-start justify-between gap-4 mb-4">
+              <div>
+                <div className="text-[#f1f3f6] text-base font-semibold">当前时间点分析摘要</div>
+                <div className="text-[#64748b] text-xs mt-1">
+                  以下内容为该时间点下的 AI 分析提示，不等同于病理诊断结论。
+                </div>
+              </div>
+
+              <span className="h-7 px-3 rounded-full border border-[#8f35b7]/35 bg-[#8f35b7]/15 text-[#d292f4] text-xs inline-flex items-center">
+                {selectedAnalysisVersion.status === '分析中' ? '分析进行中' : '建议人工复核'}
+              </span>
+            </div>
+
+            <div className="rounded-xl border border-white/[0.08] bg-[#17181d] p-4 mb-3">
+              <div className="text-[#f1f3f6] text-sm font-semibold mb-2">{selectedAnalysisVersion.title}</div>
+              <div className="text-[#94a3b8] text-sm leading-6">{selectedAnalysisVersion.summary}</div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {inferenceSummaryItems.map((item) => (
+                <div
+                  key={item.title}
+                  className="rounded-xl border border-white/[0.08] bg-[#17181d] p-4"
+                >
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div>
+                      <div className="text-[#f1f3f6] text-sm font-semibold">{item.title}</div>
+                      <div className="text-[#64748b] text-xs mt-1">{item.model}</div>
+                    </div>
+
+                    <span
+                      className={`h-6 px-2 rounded border text-xs inline-flex items-center ${
+                        item.status === '已完成'
+                          ? 'border-[#3f6212] bg-[#3f6212]/35 text-[#84cc16]'
+                          : item.status === '运行中'
+                            ? 'border-[#8f35b7]/40 bg-[#8f35b7]/20 text-[#d292f4]'
+                            : 'border-white/[0.08] bg-white/[0.05] text-[#94a3b8]'
+                      }`}
+                    >
+                      {item.status}
+                    </span>
+                  </div>
+
+                  <div className="text-[#94a3b8] text-sm leading-6">{item.content}</div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-white/[0.08] bg-[#202126] overflow-hidden">
+            <div className="h-14 px-4 border-b border-white/[0.06] flex items-center justify-between">
+              <div>
+                <div className="text-[#f1f3f6] text-base font-semibold">当前时间点推理记录</div>
+                <div className="text-[#64748b] text-xs mt-0.5">
+                  展示当前分析时间点下已提交的 AI 分析模型、执行状态、排队时间与耗时。
+                </div>
+              </div>
+            </div>
+
+            <table className="w-full table-fixed border-collapse text-sm">
+              <thead>
+                <tr className="bg-[#252730] text-[#cbd5e1]">
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '20%' }}>模型</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '18%' }}>类型</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '12%' }}>状态</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '16%' }}>核心发现</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '14%' }}>排队时间</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '10%' }}>耗时</th>
+                  <th className="h-11 px-3 text-left font-semibold" style={{ width: '10%' }}>操作</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {selectedInferenceRows.map((row) => {
+                  const finding =
+                    row.model === 'CellViT++'
+                      ? `细胞核 ${selectedAnalysisVersion.detectedNuclei} · 阳性率 ${selectedAnalysisVersion.positiveRate}`
+                      : row.model === 'TME Analyzer'
+                        ? `免疫热点 ${selectedAnalysisVersion.tmeHotspots} · 空间异质性提示`
+                        : row.model === 'CellViT-SAM'
+                          ? selectedAnalysisVersion.status === '分析中' ? '组织边界分析中' : '组织边界已生成'
+                          : selectedAnalysisVersion.qcTips > 0 ? `质控提示 ${selectedAnalysisVersion.qcTips}` : '无明显质控异常';
+
+                  return (
+                    <tr
+                      key={row.id}
+                      className="border-b border-white/[0.06] text-[#d1d5db] hover:bg-white/[0.025]"
+                    >
+                      <td className="h-11 px-3 text-[#e5e7eb] font-medium">{row.model}</td>
+                      <td className="h-11 px-3">
+                        <span className="h-6 px-2 rounded border border-white/[0.08] bg-white/[0.05] text-[#94a3b8] text-xs inline-flex items-center">
+                          {row.modelType}
+                        </span>
+                      </td>
+                      <td className="h-11 px-3">{renderInferenceStatus(row.status)}</td>
+                      <td className="h-11 px-3 text-[#94a3b8] truncate">{finding}</td>
+                      <td className="h-11 px-3">{row.queuedAt}</td>
+                      <td className="h-11 px-3">{row.duration}</td>
+                      <td className="h-11 px-3">
+                        <button
+                          type="button"
+                          onClick={() => openInferenceDetail(row)}
+                          className="text-[#d292f4] hover:text-[#f0b7ff] text-sm"
+                        >
+                          详情
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

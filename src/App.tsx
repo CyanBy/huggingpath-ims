@@ -7,12 +7,15 @@ import ModelDetail from './pages/ModelDetail';
 import Workbench from './pages/Workbench';
 import WorkbenchCaseLibrary from './pages/WorkbenchCaseLibrary';
 import About from './pages/About';
+import WorkbenchWsiManagement from './pages/WorkbenchWsiManagement';
+import WorkbenchTaskQueue from './pages/WorkbenchTaskQueue';
 
 import Login from './pages/Login';
 import CaseLibrary from './pages/CaseLibrary';
 import CaseDetail from './pages/CaseDetail';
 import WorkbenchResearchProjects from './pages/WorkbenchResearchProjects';
 import WorkbenchModelManagement from './pages/WorkbenchModelManagement';
+
 import AdminConsole from './pages/AdminConsole';
 function App() {
   return (
@@ -31,6 +34,8 @@ function App() {
   <Route path="/workbench" element={<Workbench />} />
   <Route path="/workbench/projects" element={<WorkbenchResearchProjects />} />
   <Route path="/workbench/models" element={<WorkbenchModelManagement />} />
+  <Route path="/workbench/wsi" element={<WorkbenchWsiManagement />} />
+  <Route path="/workbench/tasks" element={<WorkbenchTaskQueue />} />
   <Route path="/admin" element={<AdminConsole />} />
   <Route path="/workbench/cases" element={<WorkbenchCaseLibrary />} />
 </Routes>
