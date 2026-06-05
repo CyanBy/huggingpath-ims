@@ -50,6 +50,23 @@ interface CaseItem {
 type CaseQueueItem = CaseItem & {
   queueType: 'case';
 };
+type AnalysisObjectType = 'slide' | 'case' | 'project';
+
+type SelectedAnalysisObject = {
+  id: string;
+  name: string;
+  type: AnalysisObjectType;
+  desc: string;
+  size?: string;
+};
+
+type WorkbenchRouteState = {
+  source?: 'model_center';
+  runModelId?: string;
+  runModelName?: string;
+  analysisObjectType?: AnalysisObjectType;
+  analysisObjects?: SelectedAnalysisObject[];
+};
 
 interface StandaloneSlideQueueItem {
   queueType: 'slide';
@@ -70,6 +87,7 @@ interface ProjectQueueItem {
   modelCount: number;
   status: 'ready';
 }
+
 
 type QueueItem = CaseQueueItem | StandaloneSlideQueueItem | ProjectQueueItem;
 
@@ -310,6 +328,7 @@ const Workbench: FC = () => {
   /* ---- Mode ---- */
   const navigate = useNavigate();
 const location = useLocation();
+const routeState = location.state as WorkbenchRouteState | null;
 
 const [isLoggedIn, setIsLoggedIn] = useState(() => {
   return localStorage.getItem('isLoggedIn') === 'true';
@@ -333,6 +352,73 @@ const [addTaskType, setAddTaskType] = useState<'slide' | 'case' | 'project'>('sl
 
   /* ---- Model ---- */
   const [selectedModel, setSelectedModel] = useState<string>('mod-1');
+useEffect(() => {
+  if (!routeState?.source || routeState.source !== 'model_center') return;
+  if (!routeState.analysisObjects?.length) return;
+
+  const nextQueueItems: QueueItem[] = routeState.analysisObjects.map((item) => {
+    if (item.type === 'slide') {
+      return {
+        queueType: 'slide',
+        id: item.id,
+        fileName: item.name,
+        size: item.size || item.desc,
+        progress: 100,
+        status: 'ready',
+      };
+    }
+
+    if (item.type === 'case') {
+      return {
+        queueType: 'case',
+        id: item.id,
+        pathologyNo: item.id,
+        patientName: '模拟病例',
+        gender: '女',
+        age: 52,
+        organ: '乳腺',
+        caseType: '活检',
+        slideCount: 3,
+        date: '2026.05.20',
+        slides: [
+          {
+            id: `${item.id}-SL-001`,
+            name: `${item.id}_HE_001.svs`,
+            stain: 'HE',
+            magnification: '40X',
+            size: '1.2 GB',
+            status: 'pending',
+          },
+        ],
+      };
+    }
+
+    return {
+      queueType: 'project',
+      id: item.id,
+      projectNo: item.id,
+      name: item.name,
+      caseCount: 12,
+      wsiCount: 33,
+      modelCount: 1,
+      status: 'ready',
+    };
+  });
+
+  setQueueCases(nextQueueItems);
+
+  const matchedModel = MOCK_MODELS.find(
+    (model) =>
+      model.name === routeState.runModelName ||
+      model.id === routeState.runModelId
+  );
+
+  if (matchedModel) {
+    setSelectedModel(matchedModel.id);
+  }
+
+  window.history.replaceState({}, document.title);
+}, [routeState]);
 
   /* ---- WSI Viewer ---- */
   const [zoom, setZoom] = useState(0.35);

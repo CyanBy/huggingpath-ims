@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
@@ -15,9 +14,19 @@ import {
   Ban,
   Star,
   Download,
+  MessageSquare,
   Heart,
+  FileText,
+  Folder,
+  FolderOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useNavigate } from 'react-router-dom';
+
+/* ------------------------------------------------------------------ */
+/*  Types                                                               */
+/* ------------------------------------------------------------------ */
+
 
 type ViewMode = 'card' | 'list';
 
@@ -39,6 +48,50 @@ interface Model {
   reviews: number;
   verified: boolean;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Mock Data                                                           */
+/* ------------------------------------------------------------------ */
+const MOCK_SELECTED_OBJECTS: Record<AnalysisObjectType, SelectedAnalysisObject[]> = {
+  slide: [
+    {
+      id: 'TEMP-SLIDE-001',
+      name: 'Temporary_AI_Slide_001.svs',
+      type: 'slide',
+      desc: '1.4 GB · 待加入队列',
+      size: '1.4 GB',
+    },
+    {
+      id: 'TEMP-SLIDE-002',
+      name: 'Temporary_AI_Slide_002.sdpc',
+      type: 'slide',
+      desc: '856 MB · 待加入队列',
+      size: '856 MB',
+    },
+  ],
+  case: [
+    {
+      id: 'CASE-20260520-001',
+      name: 'CASE-20260520-001',
+      type: 'case',
+      desc: '乳腺癌 HER2 · 3 张 WSI',
+    },
+    {
+      id: 'CASE-20260520-002',
+      name: 'CASE-20260520-002',
+      type: 'case',
+      desc: '胃癌活检 · 2 张 WSI',
+    },
+  ],
+  project: [
+    {
+      id: 'PRJ-2026-001',
+      name: '乳腺癌 HER2 队列研究',
+      type: 'project',
+      desc: '12 个 Case · 33 张 WSI',
+    },
+  ],
+};
 
 const MODELS: Model[] = [
   {
@@ -174,6 +227,10 @@ const MODELS: Model[] = [
 const ORGAN_OPTIONS = ['胃', '肠', '脑', '乳腺', '肺', '肝', '肾', '前列腺'];
 const FUNCTION_OPTIONS = ['分割', '检测', '分类', '肿瘤微环境', '空间蛋白组'];
 
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                             */
+/* ------------------------------------------------------------------ */
+
 function statusColor(status: ModelStatus) {
   switch (status) {
     case 'Active':
@@ -188,6 +245,15 @@ function statusColor(status: ModelStatus) {
       return 'status-queued';
   }
 }
+type AnalysisObjectType = 'slide' | 'case' | 'project';
+
+type SelectedAnalysisObject = {
+  id: string;
+  name: string;
+  type: AnalysisObjectType;
+  desc: string;
+  size?: string;
+};
 
 function statusIcon(status: ModelStatus) {
   switch (status) {
@@ -203,6 +269,10 @@ function statusIcon(status: ModelStatus) {
       return null;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/*  Stagger animation variants                                          */
+/* ------------------------------------------------------------------ */
 
 const containerVariants = {
   hidden: {},
@@ -224,14 +294,15 @@ const itemVariants = {
 
 const headerVariants = {
   hidden: { opacity: 0, y: 20 },
-  show: {
-    opacity: 1,
-    y: 0,
-    transition: { duration: 0.4, ease: [0, 0, 0.2, 1] as [number, number, number, number] },
-  },
+  show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0, 0, 0.2, 1] as [number, number, number, number] } },
 };
 
+/* ------------------------------------------------------------------ */
+/*  Page Component                                                      */
+/* ------------------------------------------------------------------ */
+
 export default function Explore() {
+  /* State */
   const [viewMode, setViewMode] = useState<ViewMode>('card');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOrgans, setSelectedOrgans] = useState<string[]>([]);
@@ -239,10 +310,38 @@ export default function Explore() {
   const [statusFilter, setStatusFilter] = useState<string>('全部');
   const [sortBy, setSortBy] = useState<string>('热度');
   const [showAllOrgans, setShowAllOrgans] = useState(false);
+  const [runTargetModel, setRunTargetModel] = useState<Model | null>(null);
+  const [analysisObjectType, setAnalysisObjectType] = useState<'slide' | 'case' | 'project'>('slide');
+  const navigate = useNavigate();
 
+  const handleRunModel = useCallback((model: Model) => {
+    setRunTargetModel(model);
+    setAnalysisObjectType('slide');
+  }, []);
+
+  const closeRunModal = useCallback(() => {
+    setRunTargetModel(null);
+  }, []);
+
+  const confirmRunModel = useCallback(() => {
+  if (!runTargetModel) return;
+
+  navigate('/workbench', {
+    state: {
+      source: 'model_center',
+      runModelId: runTargetModel.id,
+      runModelName: runTargetModel.name,
+      analysisObjectType,
+      analysisObjects: MOCK_SELECTED_OBJECTS[analysisObjectType],
+    },
+  });
+}, [analysisObjectType, navigate, runTargetModel]);
+
+  /* Derived filter data */
   const visibleOrgans = showAllOrgans ? ORGAN_OPTIONS : ORGAN_OPTIONS.slice(0, 6);
   const hasMoreOrgans = ORGAN_OPTIONS.length > 6;
 
+  /* Toggle helpers */
   const toggleOrgan = useCallback((organ: string) => {
     setSelectedOrgans((prev) =>
       prev.includes(organ) ? prev.filter((o) => o !== organ) : [...prev, organ]
@@ -268,9 +367,11 @@ export default function Explore() {
     selectedFunctions.length +
     (statusFilter !== '全部' ? 1 : 0);
 
+  /* Filtering & sorting */
   const filteredModels = useMemo(() => {
     let data = [...MODELS];
 
+    // Search
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       data = data.filter(
@@ -282,18 +383,22 @@ export default function Explore() {
       );
     }
 
+    // Organ filter (OR within category)
     if (selectedOrgans.length > 0) {
       data = data.filter((m) => m.organs.some((o) => selectedOrgans.includes(o)));
     }
 
+    // Function filter (OR within category)
     if (selectedFunctions.length > 0) {
       data = data.filter((m) => m.functions.some((f) => selectedFunctions.includes(f)));
     }
 
+    // Status filter
     if (statusFilter !== '全部') {
       data = data.filter((m) => m.status === statusFilter);
     }
 
+    // Sort
     switch (sortBy) {
       case '热度':
         data.sort((a, b) => b.popularity - a.popularity);
@@ -309,8 +414,13 @@ export default function Explore() {
     return data;
   }, [searchQuery, selectedOrgans, selectedFunctions, statusFilter, sortBy]);
 
+  /* ---------------------------------------------------------------- */
+  /*  Render                                                            */
+  /* ---------------------------------------------------------------- */
+
   return (
     <div className="min-h-[60dvh]">
+      {/* ==================== Page Header ==================== */}
       <section className="pt-24 pb-12 border-b border-white/[0.06]">
         <div className="section-container">
           <motion.div
@@ -322,6 +432,7 @@ export default function Explore() {
             }}
             className="flex flex-col gap-6"
           >
+            {/* Eyebrow + Title */}
             <motion.div variants={headerVariants}>
               <span className="text-eyebrow uppercase text-[#64748b] tracking-widest">
                 MODEL HUB
@@ -332,6 +443,7 @@ export default function Explore() {
               </p>
             </motion.div>
 
+            {/* View Toggle + Result Count */}
             <motion.div
               variants={headerVariants}
               className="flex items-center justify-between"
@@ -376,9 +488,11 @@ export default function Explore() {
         </div>
       </section>
 
+      {/* ==================== Filter Toolbar ==================== */}
       <section className="sticky top-16 z-40 bg-[#0f1014]/95 backdrop-blur-md border-b border-white/[0.06] py-5">
         <div className="section-container">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+            {/* Search */}
             <div className="relative">
               <Search
                 size={16}
@@ -393,6 +507,7 @@ export default function Explore() {
               />
             </div>
 
+            {/* Organ Filter */}
             <div>
               <label className="text-caption text-[#64748b] block mb-1.5">器官</label>
               <div className="flex flex-wrap gap-1.5">
@@ -424,6 +539,7 @@ export default function Explore() {
               </div>
             </div>
 
+            {/* Function Filter */}
             <div>
               <label className="text-caption text-[#64748b] block mb-1.5">功能</label>
               <div className="flex flex-wrap gap-1.5">
@@ -447,6 +563,7 @@ export default function Explore() {
               </div>
             </div>
 
+            {/* Status Filter */}
             <div>
               <label className="text-caption text-[#64748b] block mb-1.5">状态</label>
               <div className="relative">
@@ -468,6 +585,7 @@ export default function Explore() {
               </div>
             </div>
 
+            {/* Sort */}
             <div>
               <label className="text-caption text-[#64748b] block mb-1.5">排序</label>
               <div className="relative">
@@ -488,6 +606,7 @@ export default function Explore() {
             </div>
           </div>
 
+          {/* Active filters + clear */}
           {activeFilterCount > 0 && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
@@ -509,7 +628,6 @@ export default function Explore() {
                   </button>
                 </span>
               ))}
-
               {selectedFunctions.map((fn) => (
                 <span
                   key={fn}
@@ -525,7 +643,6 @@ export default function Explore() {
                   </button>
                 </span>
               ))}
-
               {statusFilter !== '全部' && (
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs bg-[rgba(143,53,183,0.10)] border border-[rgba(143,53,183,0.25)] text-[#b86bdd]">
                   状态: {statusFilter}
@@ -538,7 +655,6 @@ export default function Explore() {
                   </button>
                 </span>
               )}
-
               <button
                 onClick={clearAllFilters}
                 className="text-xs text-[#8f35b7] hover:text-[#b86bdd] hover:underline underline-offset-4 transition-all ml-1"
@@ -550,6 +666,7 @@ export default function Explore() {
         </div>
       </section>
 
+      {/* ==================== Results ==================== */}
       <section className="py-8 pb-20">
         <div className="section-container">
           {filteredModels.length === 0 ? (
@@ -579,7 +696,7 @@ export default function Explore() {
                   className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"
                 >
                   {filteredModels.map((model) => (
-                    <ModelCard key={model.id} model={model} />
+                    <ModelCard key={model.id} model={model} onRun={handleRunModel} />
                   ))}
                 </motion.div>
               ) : (
@@ -592,7 +709,7 @@ export default function Explore() {
                   className="flex flex-col gap-3"
                 >
                   {filteredModels.map((model) => (
-                    <ModelListRow key={model.id} model={model} />
+                    <ModelListRow key={model.id} model={model} onRun={handleRunModel} />
                   ))}
                 </motion.div>
               )}
@@ -600,25 +717,211 @@ export default function Explore() {
           )}
         </div>
       </section>
+
+      <RunModelTargetModal
+        model={runTargetModel}
+        selectedType={analysisObjectType}
+        onSelectType={setAnalysisObjectType}
+        onClose={closeRunModal}
+        onConfirm={confirmRunModel}
+      />
     </div>
   );
 }
 
-function ModelCard({ model }: { model: Model }) {
-  const navigate = useNavigate();
 
+/* ------------------------------------------------------------------ */
+/*  RunModelTargetModal                                                 */
+/* ------------------------------------------------------------------ */
+
+function RunModelTargetModal({
+  model,
+  selectedType,
+  onSelectType,
+  onClose,
+  onConfirm,
+}: {
+  model: Model | null;
+  selectedType: 'slide' | 'case' | 'project';
+  onSelectType: (type: 'slide' | 'case' | 'project') => void;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  if (!model) return null;
+
+  const options = [
+    {
+      key: 'slide' as const,
+      title: '添加切片',
+      icon: <FileText size={32} />,
+      desc: '模拟从本地选择切片文件，切片将作为独立分析对象加入队列，不进入病例库。',
+      panelTitle: '本地切片选择效果',
+      panelDesc: '当前不真实拉起系统文件框，仅模拟已选择切片文件。',
+      rows: [
+        ['Temporary_AI_Slide_001.svs', '1.4 GB · 待加入队列'],
+        ['Temporary_AI_Slide_002.sdpc', '856 MB · 待加入队列'],
+      ],
+    },
+    {
+      key: 'case' as const,
+      title: '添加病例',
+      icon: <Folder size={32} />,
+      desc: '模拟从病例库选择病例，当前仅展示选择效果，不与病例库真实数据联动。',
+      panelTitle: '病例选择效果',
+      panelDesc: '当前选择 2 个病例，进入工作台后按病例下 WSI 批量分析。',
+      rows: [
+        ['CASE-20260520-001', '乳腺癌 HER2 · 3 张 WSI'],
+        ['CASE-20260520-002', '胃癌活检 · 2 张 WSI'],
+      ],
+    },
+    {
+      key: 'project' as const,
+      title: '添加项目',
+      icon: <FolderOpen size={32} />,
+      desc: '模拟从研究项目中选择项目，按项目下 Case / WSI 批量进入分析队列。',
+      panelTitle: '项目选择效果',
+      panelDesc: '当前选择 1 个研究项目，进入工作台后按项目范围发起分析。',
+      rows: [
+        ['乳腺癌 HER2 队列研究', '12 个 Case · 33 张 WSI'],
+        ['项目推理范围', '全项目 WSI · 自动识别组织区域'],
+      ],
+    },
+  ];
+
+  const current = options.find((item) => item.key === selectedType) || options[0];
+
+  return (
+    <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
+      <motion.div
+        initial={{ opacity: 0, y: 18, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 18, scale: 0.98 }}
+        transition={{ duration: 0.18 }}
+        className="w-[980px] max-w-[calc(100vw-48px)] max-h-[calc(100dvh-48px)] rounded-2xl border border-white/[0.08] bg-[#1f2024] shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col"
+      >
+        <div className="h-16 px-5 border-b border-white/[0.06] flex items-center justify-between shrink-0">
+          <div>
+            <div className="text-[#e2e8f0] text-xl font-bold">添加分析任务</div>
+            <div className="text-[#64748b] text-sm mt-1">
+              运行模型：<span className="text-[#d292f4]">{model.name}</span>，请先选择要加入分析队列的对象类型。
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.06] transition-all inline-flex items-center justify-center"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="p-5 overflow-auto">
+          <div className="grid grid-cols-3 gap-4 mb-5">
+            {options.map((option) => {
+              const active = selectedType === option.key;
+
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => onSelectType(option.key)}
+                  className={cn(
+                    'rounded-xl border p-5 text-left transition-all',
+                    active
+                      ? 'border-[#8f35b7] bg-[#8f35b7]/16'
+                      : 'border-white/[0.08] bg-[#17181d] hover:border-[#8f35b7]/45 hover:bg-white/[0.03]'
+                  )}
+                >
+                  <div className={cn('mb-4', active ? 'text-[#d292f4]' : 'text-[#94a3b8]')}>
+                    {option.icon}
+                  </div>
+                  <div className="text-[#e2e8f0] text-base font-semibold mb-3">
+                    {option.title}
+                  </div>
+                  <div className="text-[#94a3b8] text-sm leading-6">
+                    {option.desc}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="rounded-xl border border-white/[0.08] bg-[#17181d] overflow-hidden">
+            <div className="px-5 py-4 border-b border-white/[0.06] flex items-center justify-between">
+              <div>
+                <div className="text-[#f1f3f6] text-base font-semibold">{current.panelTitle}</div>
+                <div className="text-[#64748b] text-sm mt-1">{current.panelDesc}</div>
+              </div>
+
+              <button
+                type="button"
+                className="h-9 px-4 rounded-md bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all"
+              >
+                选择{current.key === 'slide' ? '切片' : current.key === 'case' ? '病例' : '项目'}
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              {current.rows.map(([title, desc]) => (
+                <div
+                  key={title}
+                  className="h-16 px-4 rounded-lg border border-white/[0.08] bg-[#111217] flex items-center justify-between"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <FileText size={20} className="text-[#d292f4] shrink-0" />
+                    <div className="min-w-0">
+                      <div className="text-[#e2e8f0] text-sm font-medium truncate">{title}</div>
+                      <div className="text-[#64748b] text-xs mt-1">{desc}</div>
+                    </div>
+                  </div>
+
+                  <span className="text-[#d292f4] text-sm shrink-0">已选择</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="h-16 px-5 border-t border-white/[0.06] bg-[#17181d] flex items-center justify-end gap-3 shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="h-10 px-5 rounded-md border border-white/[0.08] bg-[#202126] text-[#94a3b8] text-sm hover:text-[#e2e8f0] hover:bg-white/[0.04] transition-all"
+          >
+            取消
+          </button>
+
+          <button
+            type="button"
+            onClick={onConfirm}
+            className="h-10 px-5 rounded-md bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all"
+          >
+            确定
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  ModelCard (Grid View)                                               */
+/* ------------------------------------------------------------------ */
+
+function ModelCard({ model, onRun }: { model: Model; onRun: (model: Model) => void }) {
   return (
     <motion.article
       variants={itemVariants}
       className="card-base flex flex-col gap-4 group"
       whileTap={{ scale: 0.98 }}
     >
+      {/* Top row: status + trust badges */}
       <div className="flex items-center justify-between">
         <span className={cn('status-badge', statusColor(model.status))}>
           {statusIcon(model.status)}
           {model.status}
         </span>
-
         <div className="flex items-center gap-1.5">
           {model.verified && (
             <span
@@ -629,7 +932,6 @@ function ModelCard({ model }: { model: Model }) {
               Verified
             </span>
           )}
-
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-[rgba(168,85,247,0.12)] text-[#c084fc] border border-[rgba(168,85,247,0.20)]">
             <Heart size={10} />
             {model.popularity}
@@ -637,6 +939,7 @@ function ModelCard({ model }: { model: Model }) {
         </div>
       </div>
 
+      {/* Name + ID */}
       <div>
         <h3 className="text-h3 text-[#e2e8f0] group-hover:text-[#b86bdd] transition-colors duration-150">
           {model.name}
@@ -644,8 +947,10 @@ function ModelCard({ model }: { model: Model }) {
         <p className="font-mono text-mono-sm text-[#475569] mt-1">{model.id}</p>
       </div>
 
+      {/* Summary */}
       <p className="text-body text-[#94a3b8] line-clamp-2">{model.summary}</p>
 
+      {/* Tags */}
       <div className="flex flex-wrap gap-1.5">
         {model.organs.map((o) => (
           <span key={o} className="tag-organ">
@@ -659,6 +964,7 @@ function ModelCard({ model }: { model: Model }) {
         ))}
       </div>
 
+      {/* Meta row */}
       <div className="flex items-center justify-between text-caption text-[#64748b]">
         <span>{model.deployment}</span>
         <div className="flex items-center gap-3">
@@ -673,15 +979,15 @@ function ModelCard({ model }: { model: Model }) {
         </div>
       </div>
 
+      {/* Action buttons */}
       <div className="flex items-center gap-3 mt-auto pt-2 border-t border-white/[0.05]">
         <button className="btn-secondary h-9 px-4 text-sm gap-1.5">
           <Eye size={14} />
           查看详情
         </button>
-
         <button
           type="button"
-          onClick={() => navigate('/workbench')}
+          onClick={() => onRun(model)}
           className="btn-primary h-9 px-4 text-sm gap-1.5"
         >
           <Play size={14} />
@@ -692,34 +998,35 @@ function ModelCard({ model }: { model: Model }) {
   );
 }
 
-function ModelListRow({ model }: { model: Model }) {
-  const navigate = useNavigate();
+/* ------------------------------------------------------------------ */
+/*  ModelListRow (List View)                                            */
+/* ------------------------------------------------------------------ */
 
+function ModelListRow({ model, onRun }: { model: Model; onRun: (model: Model) => void }) {
   return (
     <motion.article
       variants={itemVariants}
       className="bg-[#24262c] border border-white/[0.06] rounded-xl px-5 py-4 flex flex-col sm:grid sm:grid-cols-[2fr_1fr_1fr_1fr_0.8fr] sm:items-center gap-3 sm:gap-4 group hover:border-[rgba(143,53,183,0.30)] hover:-translate-y-0.5 hover:shadow-card-hover transition-all duration-200"
       whileTap={{ scale: 0.99 }}
     >
+      {/* Column 1: Status + Name */}
       <div className="flex flex-col gap-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className={cn('status-badge text-[11px]', statusColor(model.status))}>
             {statusIcon(model.status)}
             {model.status}
           </span>
-
           {model.verified && (
             <CheckCircle2 size={12} className="text-[#a64ed0]" />
           )}
         </div>
-
         <h4 className="text-h4 text-[#e2e8f0] truncate group-hover:text-[#b86bdd] transition-colors">
           {model.name}
         </h4>
-
         <p className="font-mono text-[11px] text-[#475569] truncate">{model.id}</p>
       </div>
 
+      {/* Column 2: Organs */}
       <div className="flex flex-wrap gap-1">
         {model.organs.slice(0, 3).map((o) => (
           <span key={o} className="tag-organ text-[11px] py-0.5 px-2">
@@ -731,6 +1038,7 @@ function ModelListRow({ model }: { model: Model }) {
         )}
       </div>
 
+      {/* Column 3: Functions */}
       <div className="flex flex-wrap gap-1">
         {model.functions.slice(0, 3).map((f) => (
           <span key={f} className="tag-function text-[11px] py-0.5 px-2">
@@ -742,6 +1050,7 @@ function ModelListRow({ model }: { model: Model }) {
         )}
       </div>
 
+      {/* Column 4: Stats */}
       <div className="flex flex-col gap-0.5 text-caption text-[#64748b]">
         <span className="inline-flex items-center gap-1">
           <Download size={12} />
@@ -754,14 +1063,14 @@ function ModelListRow({ model }: { model: Model }) {
         <span>{model.updatedAt}</span>
       </div>
 
+      {/* Column 5: Actions */}
       <div className="flex items-center gap-2 sm:justify-end">
         <button className="text-sm text-[#8f35b7] hover:text-[#b86bdd] hover:underline underline-offset-4 transition-all">
           查看
         </button>
-
         <button
           type="button"
-          onClick={() => navigate('/workbench')}
+          onClick={() => onRun(model)}
           className="h-8 px-3 bg-transparent border border-[#8f35b7] text-[#8f35b7] rounded-lg text-xs font-medium inline-flex items-center gap-1 hover:bg-[rgba(143,53,183,0.10)] hover:border-[#b86bdd] transition-all duration-150"
         >
           <Play size={12} />

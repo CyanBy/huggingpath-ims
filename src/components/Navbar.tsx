@@ -10,10 +10,11 @@ const navLinks = [
 ];
 
 const workbenchLinks = [
-  { label: '分析队列', path: '/workbench' },
+  { label: '分析队列', path: '/workbench/tasks' },
   { label: 'Case 管理', path: '/workbench/cases' },
+  { label: 'WSI 管理', path: '/workbench/wsi' },
   { label: '研究项目管理', path: '/workbench/projects' },
-  { label: '模型管理', path: '/workbench/models' },
+   { label: 'AI 工作台', path: '/workbench' },
 ];
 
 export default function Navbar() {
@@ -69,12 +70,11 @@ const logout = () => {
   window.dispatchEvent(new Event('authChange'));
   
 };
-  const resetGuestUsage = () => {
-  localStorage.removeItem('isLoggedIn');
-  localStorage.removeItem('guestAnalysisCount');
-  setIsLoggedIn(false);
+
+
+const goUserCenter = () => {
   setUserMenuOpen(false);
-  window.dispatchEvent(new Event('authChange'));
+  navigate('/user-center');
 };
 
   return (
@@ -125,7 +125,10 @@ const logout = () => {
             <div className="absolute left-0 top-full pt-2 hidden group-hover:block">
               <div className="w-[148px] rounded-lg border border-white/[0.08] bg-[#1f2024]/98 backdrop-blur-xl shadow-[0_18px_48px_rgba(0,0,0,0.38)] p-1.5">
                 {workbenchLinks.map((link) => {
-                  const isActive = location.pathname === link.path;
+                  const isActive =
+                    link.path === '/workbench'
+                      ? location.pathname === '/workbench'
+                      : location.pathname === link.path || location.pathname.startsWith(`${link.path}/`);
 
                   return (
                     <Link
@@ -149,7 +152,10 @@ const logout = () => {
           {navLinks
             .filter((link) => link.label !== '模型中心')
             .map((link) => {
-              const isActive = location.pathname === link.path;
+              const isActive =
+                    link.path === '/workbench'
+                      ? location.pathname === '/workbench'
+                      : location.pathname === link.path || location.pathname.startsWith(`${link.path}/`);
 
               return (
                 <Link
@@ -174,7 +180,7 @@ const logout = () => {
             <Search size={16} className="absolute left-3 text-[#64748b] pointer-events-none" />
             <input
               type="text"
-              placeholder="搜索模型、项目..."
+              placeholder="搜索模型、研究项目..."
               className="input-field h-10 w-[280px] pl-9 pr-3 text-sm"
             />
           </div>
@@ -209,27 +215,29 @@ const logout = () => {
     </button>
 
     {userMenuOpen && (
-      <div className="absolute right-0 top-[44px] w-[150px] rounded-lg border border-white/[0.08] bg-[#1f2024]/98 backdrop-blur-xl shadow-[0_18px_48px_rgba(0,0,0,0.38)] p-1.5 z-[80]">
+      <div className="absolute right-0 top-[44px] w-[188px] rounded-lg border border-white/[0.08] bg-[#1f2024]/98 backdrop-blur-xl shadow-[0_18px_48px_rgba(0,0,0,0.38)] p-1.5 z-[80]">
         <div className="px-3 py-2 border-b border-white/[0.06] mb-1">
           <div className="text-[#e2e8f0] text-sm font-medium">演示用户</div>
-          <div className="text-[#64748b] text-xs mt-0.5">已登录</div>
+          <div className="text-[#64748b] text-xs mt-0.5">demo@example.com</div>
         </div>
 
         <button
+          type="button"
+          onClick={goUserCenter}
+          className="w-full h-9 px-3 rounded-md text-sm text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.06] flex items-center gap-2 transition-all duration-150"
+        >
+          <UserCircle size={15} />
+          个人资料
+        </button>
+
+        <button
+          type="button"
           onClick={logout}
           className="w-full h-9 px-3 rounded-md text-sm text-[#94a3b8] hover:text-[#ff9c9c] hover:bg-white/[0.06] flex items-center gap-2 transition-all duration-150"
         >
-  
           <LogOut size={15} />
           退出登录
         </button>
-        <button
-  onClick={resetGuestUsage}
-  className="w-full h-9 px-3 rounded-md text-sm text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.06] flex items-center gap-2 transition-all duration-150"
->
-  <LogOut size={15} />
-  重置游客次数
-</button>
       </div>
     )}
   </div>
@@ -267,7 +275,7 @@ const logout = () => {
               <Search size={16} className="absolute left-3 text-[#64748b] pointer-events-none" />
               <input
                 type="text"
-                placeholder="搜索模型、项目..."
+                placeholder="搜索模型、研究项目..."
                 className="input-field h-10 w-full pl-9 pr-3 text-sm"
               />
             </div>
@@ -285,7 +293,10 @@ const logout = () => {
 
             <div className="px-3 pt-3 pb-1 text-xs text-[#64748b]">工作台</div>
             {workbenchLinks.map((link) => {
-              const isActive = location.pathname === link.path;
+              const isActive =
+                    link.path === '/workbench'
+                      ? location.pathname === '/workbench'
+                      : location.pathname === link.path || location.pathname.startsWith(`${link.path}/`);
 
               return (
                 <Link

@@ -405,6 +405,33 @@ function RoleStatusBadge({ status }: { status: RoleStatus }) {
   );
 }
 
+function StatusToggle({
+  checked,
+  onClick,
+  title,
+}: {
+  checked: boolean;
+  onClick: () => void;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`relative h-[28px] w-[56px] rounded-full transition-all duration-200 ${
+        checked ? 'bg-[#8f35b7]' : 'bg-[#303139]'
+      }`}
+    >
+      <span
+        className={`absolute top-[3px] h-[22px] w-[22px] rounded-full bg-white shadow-sm transition-all duration-200 ${
+          checked ? 'left-[30px]' : 'left-[4px]'
+        }`}
+      />
+    </button>
+  );
+}
+
 function SectionTitle({
   title,
   desc,
@@ -700,6 +727,19 @@ function UsersPanel() {
     closeModal();
   };
 
+  const toggleUserStatus = (userId: string) => {
+    setUsers((prev) =>
+      prev.map((item) =>
+        item.id === userId
+          ? {
+              ...item,
+              status: item.status === '正常' ? '停用' : '正常',
+            }
+          : item
+      )
+    );
+  };
+
   return (
     <>
       <SectionTitle
@@ -727,10 +767,6 @@ function UsersPanel() {
             placeholder="搜索用户名 / 邮箱 / 机构 / 角色"
           />
         </div>
-
-        <div className="text-[#64748b] text-xs">
-          当前共 {users.length} 个用户，筛选结果 {filteredUsers.length} 条
-        </div>
       </div>
 
       <div className="rounded-xl border border-white/[0.08] bg-[#202126] overflow-hidden">
@@ -754,7 +790,13 @@ function UsersPanel() {
                 <td className="h-11 px-3 font-mono">{item.email}</td>
                 <td className="h-11 px-3">{item.organization}</td>
                 <td className="h-11 px-3">{item.role}</td>
-                <td className="h-11 px-3"><StatusBadge status={item.status} /></td>
+                <td className="h-11 px-3">
+                  <StatusToggle
+                    checked={item.status === '正常'}
+                    onClick={() => toggleUserStatus(item.id)}
+                    title={item.status === '正常' ? '点击停用' : '点击启用'}
+                  />
+                </td>
                 <td className="h-11 px-3">{item.lastLogin}</td>
                 <td className="h-11 px-3">
                   <button className="text-[#d292f4] hover:text-[#f0b7ff]">编辑</button>
@@ -917,7 +959,6 @@ function RolesPanel() {
   const [isCreatingRole, setIsCreatingRole] = useState(false);
 
   const [draftName, setDraftName] = useState('');
-  const [draftDescription, setDraftDescription] = useState('');
   const [draftStatus, setDraftStatus] = useState<RoleStatus>('启用');
   const [draftPermissions, setDraftPermissions] = useState<string[]>([]);
   const [draftError, setDraftError] = useState('');
@@ -925,7 +966,7 @@ function RolesPanel() {
   const filteredRoles = roles.filter((role) => {
     if (!keyword.trim()) return true;
 
-    const text = `${role.name} ${role.type} ${role.description} ${role.status}`.toLowerCase();
+    const text = `${role.name} ${role.status}`.toLowerCase();
     return text.includes(keyword.trim().toLowerCase());
   });
 
@@ -933,7 +974,6 @@ function RolesPanel() {
     setIsCreatingRole(true);
     setEditingRole(null);
     setDraftName('');
-    setDraftDescription('');
     setDraftStatus('启用');
     setDraftPermissions([]);
     setDraftError('');
@@ -943,13 +983,12 @@ function RolesPanel() {
     setIsCreatingRole(false);
     setEditingRole(role);
     setDraftName(role.name);
-    setDraftDescription(role.description);
     setDraftStatus(role.status);
     setDraftPermissions(role.permissions);
     setDraftError('');
   };
 
-  const closeRoleDrawer = () => {
+  const closeRoleModal = () => {
     setIsCreatingRole(false);
     setEditingRole(null);
     setDraftError('');
@@ -980,11 +1019,6 @@ function RolesPanel() {
       return;
     }
 
-    if (!draftDescription.trim()) {
-      setDraftError('请输入角色说明。');
-      return;
-    }
-
     if (draftPermissions.length === 0) {
       setDraftError('请至少选择一个权限。');
       return;
@@ -995,7 +1029,7 @@ function RolesPanel() {
         id: `role-${Date.now()}`,
         name: draftName.trim(),
         type: '自定义',
-        description: draftDescription.trim(),
+        description: '',
         userCount: 0,
         status: draftStatus,
         updatedAt: '2026-05-20',
@@ -1003,7 +1037,7 @@ function RolesPanel() {
       };
 
       setRoles((prev) => [nextRole, ...prev]);
-      closeRoleDrawer();
+      closeRoleModal();
       return;
     }
 
@@ -1014,7 +1048,6 @@ function RolesPanel() {
             ? {
                 ...role,
                 name: draftName.trim(),
-                description: draftDescription.trim(),
                 status: draftStatus,
                 updatedAt: '2026-05-20',
                 permissions: draftPermissions,
@@ -1022,91 +1055,65 @@ function RolesPanel() {
             : role
         )
       );
-      closeRoleDrawer();
+      closeRoleModal();
     }
   };
 
-  const activeDrawerRoleType: RoleType = isCreatingRole ? '自定义' : editingRole?.type || '自定义';
-  const canEditName = isCreatingRole || activeDrawerRoleType === '自定义';
-  const drawerOpen = isCreatingRole || Boolean(editingRole);
+  const toggleRoleStatus = (roleId: string) => {
+    setRoles((prev) =>
+      prev.map((role) =>
+        role.id === roleId
+          ? {
+              ...role,
+              status: role.status === '启用' ? '停用' : '启用',
+              updatedAt: '2026-05-20',
+            }
+          : role
+      )
+    );
+  };
+
+  const deleteRole = (roleId: string) => {
+    setRoles((prev) => prev.filter((role) => role.id !== roleId));
+  };
+
+  const roleModalOpen = isCreatingRole || Boolean(editingRole);
 
   return (
     <>
       <SectionTitle
         title="角色管理"
-        desc="管理平台角色与权限模板。角色管理作为独立后台菜单，权限配置在点击编辑后进入抽屉完成。"
-        action={
-          <button
-            type="button"
-            onClick={openCreateRole}
-            className="h-9 px-4 rounded-md bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all inline-flex items-center gap-2"
-          >
-            <Plus size={16} />
-            新增角色
-          </button>
-        }
+        desc="管理平台角色与权限模板，支持新增、编辑、删除和启用状态控制。"
       />
 
-      <div className="grid grid-cols-4 gap-4 mb-5">
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-          <div className="text-[#64748b] text-sm mb-3">角色总数</div>
-          <div className="text-[#f1f3f6] text-2xl font-bold">{roles.length}</div>
-          <div className="text-[#64748b] text-xs mt-2">系统角色与自定义角色合计。</div>
-        </div>
-
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-          <div className="text-[#64748b] text-sm mb-3">系统内置角色</div>
-          <div className="text-[#f1f3f6] text-2xl font-bold">
-            {roles.filter((item) => item.type === '系统内置').length}
-          </div>
-          <div className="text-[#64748b] text-xs mt-2">不可删除，仅建议调整启用状态。</div>
-        </div>
-
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-          <div className="text-[#64748b] text-sm mb-3">自定义角色</div>
-          <div className="text-[#f1f3f6] text-2xl font-bold">
-            {roles.filter((item) => item.type === '自定义').length}
-          </div>
-          <div className="text-[#64748b] text-xs mt-2">用于细化机构或平台权限。</div>
-        </div>
-
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-          <div className="text-[#64748b] text-sm mb-3">停用角色</div>
-          <div className="text-[#f1f3f6] text-2xl font-bold">
-            {roles.filter((item) => item.status === '停用').length}
-          </div>
-          <div className="text-[#64748b] text-xs mt-2">停用后不可继续分配给用户。</div>
-        </div>
-      </div>
-
       <div className="mb-4 flex items-center justify-between gap-4">
-        <div className="h-9 w-[320px] rounded-md border border-white/[0.08] bg-[#17181d] px-3 flex items-center gap-2">
+        <div className="h-9 w-[360px] rounded-md border border-white/[0.08] bg-[#17181d] px-3 flex items-center gap-2">
           <Search size={15} className="text-[#64748b]" />
           <input
             value={keyword}
             onChange={(event) => setKeyword(event.target.value)}
             className="w-full bg-transparent outline-none text-sm text-[#cbd5e1] placeholder:text-[#64748b]"
-            placeholder="搜索角色名称 / 类型 / 状态"
+            placeholder="搜索角色名称 / 状态"
           />
         </div>
 
-        <div className="text-[#64748b] text-xs">
-          当前共 {roles.length} 个角色，筛选结果 {filteredRoles.length} 条
-        </div>
+        <button
+          type="button"
+          onClick={openCreateRole}
+          className="h-9 px-4 rounded-md bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all inline-flex items-center gap-2"
+        >
+          <Plus size={16} />
+          新增角色
+        </button>
       </div>
 
       <div className="rounded-xl border border-white/[0.08] bg-[#202126] overflow-hidden">
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="bg-[#252730] text-[#cbd5e1]">
-              <th className="h-11 px-3 text-left" style={{ width: '16%' }}>角色名称</th>
-              <th className="h-11 px-3 text-left" style={{ width: '10%' }}>类型</th>
-              <th className="h-11 px-3 text-left" style={{ width: '30%' }}>说明</th>
-              <th className="h-11 px-3 text-left" style={{ width: '10%' }}>用户数</th>
-              <th className="h-11 px-3 text-left" style={{ width: '10%' }}>权限数</th>
-              <th className="h-11 px-3 text-left" style={{ width: '10%' }}>状态</th>
-              <th className="h-11 px-3 text-left" style={{ width: '8%' }}>更新时间</th>
-              <th className="h-11 px-3 text-left" style={{ width: '6%' }}>操作</th>
+              <th className="h-11 px-4 text-left">角色名称</th>
+              <th className="h-11 px-3 text-left" style={{ width: 120 }}>状态</th>
+              <th className="h-11 px-4 text-left" style={{ width: 180 }}>操作</th>
             </tr>
           </thead>
 
@@ -1116,31 +1123,34 @@ function RolesPanel() {
                 key={role.id}
                 className="border-b border-white/[0.06] text-[#d1d5db] hover:bg-white/[0.025]"
               >
-                <td className="h-12 px-3 text-[#e2e8f0] font-medium">{role.name}</td>
+                <td className="h-12 px-4 text-[#e2e8f0] font-medium">{role.name}</td>
                 <td className="h-12 px-3">
-                  <span
-                    className={`h-6 px-2 rounded border text-xs inline-flex items-center ${
-                      role.type === '系统内置'
-                        ? 'border-[#8f35b7]/35 bg-[#8f35b7]/15 text-[#d292f4]'
-                        : 'border-white/[0.08] bg-white/[0.05] text-[#94a3b8]'
-                    }`}
-                  >
-                    {role.type}
-                  </span>
+                  <StatusToggle
+                    checked={role.status === '启用'}
+                    onClick={() => toggleRoleStatus(role.id)}
+                    title={role.status === '启用' ? '点击停用' : '点击启用'}
+                  />
                 </td>
-                <td className="h-12 px-3 text-[#94a3b8] truncate">{role.description}</td>
-                <td className="h-12 px-3">{role.userCount}</td>
-                <td className="h-12 px-3">{role.permissions.length}</td>
-                <td className="h-12 px-3"><RoleStatusBadge status={role.status} /></td>
-                <td className="h-12 px-3">{role.updatedAt}</td>
-                <td className="h-12 px-3">
-                  <button
-                    type="button"
-                    onClick={() => openEditRole(role)}
-                    className="text-[#d292f4] hover:text-[#f0b7ff]"
-                  >
-                    编辑
-                  </button>
+                <td className="h-12 px-4">
+                  <div className="flex items-center gap-4 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => openEditRole(role)}
+                      className="text-[#d292f4] hover:text-[#f0b7ff]"
+                    >
+                      编辑
+                    </button>
+
+                    {role.type === '自定义' && (
+                      <button
+                        type="button"
+                        onClick={() => deleteRole(role.id)}
+                        className="text-[#fca5a5] hover:text-[#fecaca]"
+                      >
+                        删除
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1154,24 +1164,25 @@ function RolesPanel() {
             <div className="text-[#64748b] text-xs mt-1">请调整搜索关键词。</div>
           </div>
         )}
+
       </div>
 
-      {drawerOpen && (
-        <div className="fixed inset-0 z-[140] bg-black/60 backdrop-blur-sm flex justify-end">
-          <div className="h-full w-[680px] border-l border-white/[0.08] bg-[#202126] shadow-[0_0_60px_rgba(0,0,0,0.45)] flex flex-col">
+      {roleModalOpen && (
+        <div className="fixed inset-0 z-[140] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
+          <div className="w-[820px] max-w-[calc(100vw-48px)] max-h-[calc(100dvh-48px)] rounded-2xl border border-white/[0.08] bg-[#202126] shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col">
             <div className="h-16 px-5 border-b border-white/[0.06] flex items-center justify-between shrink-0">
               <div>
                 <div className="text-[#f1f3f6] text-lg font-bold">
-                  {isCreatingRole ? '新增角色' : '编辑角色权限'}
+                  {isCreatingRole ? '新增角色' : '编辑角色'}
                 </div>
                 <div className="text-[#64748b] text-xs mt-1">
-                  {isCreatingRole ? '创建自定义角色，并配置权限范围。' : '调整当前角色的权限范围。'}
+                  {isCreatingRole ? '创建角色并配置权限范围。' : '编辑当前角色名称、状态和权限范围。'}
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={closeRoleDrawer}
+                onClick={closeRoleModal}
                 className="w-8 h-8 rounded-lg text-[#94a3b8] hover:text-[#e2e8f0] hover:bg-white/[0.06] transition-all inline-flex items-center justify-center"
               >
                 <X size={18} />
@@ -1188,7 +1199,7 @@ function RolesPanel() {
               <div className="rounded-xl border border-white/[0.08] bg-[#17181d] p-4">
                 <div className="text-[#f1f3f6] text-sm font-semibold mb-4">角色基础信息</div>
 
-                <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm text-[#cbd5e1] mb-2">
                       角色名称 <span className="text-[#ff8f8f]">*</span>
@@ -1196,50 +1207,21 @@ function RolesPanel() {
                     <input
                       value={draftName}
                       onChange={(event) => setDraftName(event.target.value)}
-                      disabled={!canEditName}
-                      className={`w-full h-10 rounded-md border border-white/[0.08] bg-[#202126] px-3 text-sm outline-none focus:border-[#8f35b7] ${
-                        canEditName ? 'text-[#e2e8f0]' : 'text-[#64748b] cursor-not-allowed'
-                      }`}
+                      className="w-full h-10 rounded-md border border-white/[0.08] bg-[#202126] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
                       placeholder="请输入角色名称"
                     />
-                    {!canEditName && (
-                      <div className="text-[#64748b] text-xs mt-1">
-                        系统内置角色名称不可修改。
-                      </div>
-                    )}
                   </div>
 
                   <div>
-                    <label className="block text-sm text-[#cbd5e1] mb-2">
-                      角色说明 <span className="text-[#ff8f8f]">*</span>
-                    </label>
-                    <textarea
-                      value={draftDescription}
-                      onChange={(event) => setDraftDescription(event.target.value)}
-                      className="w-full min-h-[88px] rounded-md border border-white/[0.08] bg-[#202126] px-3 py-2 text-sm leading-6 text-[#e2e8f0] outline-none focus:border-[#8f35b7] resize-none"
-                      placeholder="请输入角色说明"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-sm text-[#cbd5e1] mb-2">角色类型</div>
-                      <div className="h-10 px-3 rounded-md border border-white/[0.08] bg-[#202126] text-[#94a3b8] text-sm flex items-center">
-                        {activeDrawerRoleType}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm text-[#cbd5e1] mb-2">角色状态</label>
-                      <select
-                        value={draftStatus}
-                        onChange={(event) => setDraftStatus(event.target.value as RoleStatus)}
-                        className="w-full h-10 rounded-md border border-white/[0.08] bg-[#202126] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
-                      >
-                        <option value="启用">启用</option>
-                        <option value="停用">停用</option>
-                      </select>
-                    </div>
+                    <label className="block text-sm text-[#cbd5e1] mb-2">角色状态</label>
+                    <select
+                      value={draftStatus}
+                      onChange={(event) => setDraftStatus(event.target.value as RoleStatus)}
+                      className="w-full h-10 rounded-md border border-white/[0.08] bg-[#202126] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
+                    >
+                      <option value="启用">启用</option>
+                      <option value="停用">停用</option>
+                    </select>
                   </div>
                 </div>
               </div>
@@ -1249,7 +1231,7 @@ function RolesPanel() {
                   <div>
                     <div className="text-[#f1f3f6] text-sm font-semibold">权限配置</div>
                     <div className="text-[#64748b] text-xs mt-1">
-                      选择该角色可使用的功能权限。当前为前端演示，不做真实鉴权。
+                      选择该角色可使用的功能权限。正式系统中应由后端返回可配置权限树。
                     </div>
                   </div>
 
@@ -1313,19 +1295,12 @@ function RolesPanel() {
                   })}
                 </div>
               </div>
-
-              <div className="rounded-xl border border-[#8f35b7]/25 bg-[#8f35b7]/10 p-4">
-                <div className="text-[#d292f4] text-sm font-semibold mb-1">权限配置说明</div>
-                <div className="text-[#94a3b8] text-xs leading-6">
-                  当前页面只用于展示后台角色与权限配置方式。正式系统中，权限应由后端统一返回，并在菜单、按钮、数据范围和接口层进行统一控制。
-                </div>
-              </div>
             </div>
 
             <div className="h-16 px-5 border-t border-white/[0.06] bg-[#17181d] flex items-center justify-end gap-3 shrink-0">
               <button
                 type="button"
-                onClick={closeRoleDrawer}
+                onClick={closeRoleModal}
                 className="h-9 px-4 rounded-md border border-white/[0.08] bg-[#202126] text-[#94a3b8] text-sm hover:text-[#e2e8f0] hover:bg-white/[0.04] transition-all"
               >
                 取消
@@ -1337,7 +1312,7 @@ function RolesPanel() {
                 className="h-9 px-4 rounded-md bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all inline-flex items-center gap-2"
               >
                 <CheckCircle2 size={16} />
-                保存
+                {isCreatingRole ? '确认新增' : '保存修改'}
               </button>
             </div>
           </div>
@@ -1350,13 +1325,14 @@ function RolesPanel() {
 function OrganizationsPanel() {
   const [organizationRows, setOrganizationRows] = useState(organizations);
   const [keyword, setKeyword] = useState('');
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showOrgModal, setShowOrgModal] = useState(false);
+  const [orgModalMode, setOrgModalMode] = useState<'create' | 'edit'>('create');
+  const [editingOrgName, setEditingOrgName] = useState<string | null>(null);
 
-  const [newOrgName, setNewOrgName] = useState('');
-  const [newOrgType, setNewOrgType] = useState('病理中心');
-  const [newOrgUserCount, setNewOrgUserCount] = useState('0');
-  const [newOrgQuota, setNewOrgQuota] = useState('1 TB');
-  const [newOrgStatus, setNewOrgStatus] = useState<CommonStatus>('正常');
+  const [orgName, setOrgName] = useState('');
+  const [orgType, setOrgType] = useState('病理中心');
+  const [orgQuota, setOrgQuota] = useState('1 TB');
+  const [orgStatus, setOrgStatus] = useState<CommonStatus>('正常');
   const [error, setError] = useState('');
 
   const filteredOrganizations = organizationRows.filter((item) => {
@@ -1367,80 +1343,127 @@ function OrganizationsPanel() {
   });
 
   const resetForm = () => {
-    setNewOrgName('');
-    setNewOrgType('病理中心');
-    setNewOrgUserCount('0');
-    setNewOrgQuota('1 TB');
-    setNewOrgStatus('正常');
+    setOrgName('');
+    setOrgType('病理中心');
+    setOrgQuota('1 TB');
+    setOrgStatus('正常');
     setError('');
+    setEditingOrgName(null);
+  };
+
+  const openCreateModal = () => {
+    resetForm();
+    setOrgModalMode('create');
+    setShowOrgModal(true);
+  };
+
+  const openEditModal = (organization: (typeof organizations)[number]) => {
+    setOrgModalMode('edit');
+    setEditingOrgName(organization.name);
+    setOrgName(organization.name);
+    setOrgType(organization.type);
+    setOrgQuota(organization.quota);
+    setOrgStatus(organization.status);
+    setError('');
+    setShowOrgModal(true);
   };
 
   const closeModal = () => {
     resetForm();
-    setShowCreateModal(false);
+    setShowOrgModal(false);
   };
 
-  const parseCount = (value: string) => {
-    const parsed = Number(value);
-    if (!Number.isFinite(parsed) || parsed < 0) return null;
-    return Math.floor(parsed);
-  };
-
-  const createOrganization = () => {
-    if (!newOrgName.trim()) {
+  const validateOrgForm = () => {
+    if (!orgName.trim()) {
       setError('请输入机构名称。');
-      return;
+      return false;
+    }
+
+    if (!orgType.trim()) {
+      setError('请选择机构类型。');
+      return false;
+    }
+
+    if (!orgQuota.trim()) {
+      setError('请输入存储配额。');
+      return false;
     }
 
     const duplicatedName = organizationRows.some(
-      (item) => item.name.trim().toLowerCase() === newOrgName.trim().toLowerCase()
+      (item) =>
+        item.name.trim().toLowerCase() === orgName.trim().toLowerCase() &&
+        item.name !== editingOrgName
     );
 
     if (duplicatedName) {
       setError('该机构名称已存在，请更换机构名称。');
+      return false;
+    }
+
+    return true;
+  };
+
+  const saveOrganization = () => {
+    if (!validateOrgForm()) return;
+
+    if (orgModalMode === 'create') {
+      const nextOrganization = {
+        name: orgName.trim(),
+        type: orgType.trim(),
+        userCount: 0,
+        caseCount: 0,
+        wsiCount: 0,
+        quota: orgQuota.trim(),
+        status: orgStatus,
+      };
+
+      setOrganizationRows((prev) => [nextOrganization, ...prev]);
+      closeModal();
       return;
     }
 
-    if (!newOrgType.trim()) {
-      setError('请输入机构类型。');
-      return;
-    }
-
-    if (!newOrgQuota.trim()) {
-      setError('请输入存储配额。');
-      return;
-    }
-
-    const userCount = parseCount(newOrgUserCount);
-
-    if (userCount === null) {
-      setError('用户数必须为大于等于 0 的数字。');
-      return;
-    }
-
-    const nextOrganization = {
-      name: newOrgName.trim(),
-      type: newOrgType.trim(),
-      userCount,
-      caseCount: 0,
-      wsiCount: 0,
-      quota: newOrgQuota.trim(),
-      status: newOrgStatus,
-    };
-
-    setOrganizationRows((prev) => [nextOrganization, ...prev]);
+    setOrganizationRows((prev) =>
+      prev.map((item) =>
+        item.name === editingOrgName
+          ? {
+              ...item,
+              name: orgName.trim(),
+              type: orgType.trim(),
+              quota: orgQuota.trim(),
+              status: orgStatus,
+            }
+          : item
+      )
+    );
     closeModal();
+  };
+
+  const toggleOrganizationStatus = (organizationName: string) => {
+    setOrganizationRows((prev) =>
+      prev.map((item) =>
+        item.name === organizationName
+          ? {
+              ...item,
+              status: item.status === '正常' ? '停用' : '正常',
+            }
+          : item
+      )
+    );
+  };
+
+  const deleteOrganization = (organizationName: string) => {
+    setOrganizationRows((prev) => prev.filter((item) => item.name !== organizationName));
   };
 
   return (
     <>
       <SectionTitle
         title="机构管理"
-        desc="管理医院、实验室、科研机构和企业组织。"
+        desc="管理医院、实验室、科研机构和企业组织。支持新增、编辑、删除，以及通过开关控制机构启用状态。"
         action={
           <button
             type="button"
-            onClick={() => setShowCreateModal(true)}
+            onClick={openCreateModal}
             className="h-9 px-4 rounded-md bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all inline-flex items-center gap-2"
           >
             <Plus size={16} />
@@ -1459,24 +1482,20 @@ function OrganizationsPanel() {
             placeholder="搜索机构名称 / 类型 / 状态"
           />
         </div>
-
-        <div className="text-[#64748b] text-xs">
-          当前共 {organizationRows.length} 个机构，筛选结果 {filteredOrganizations.length} 条
-        </div>
       </div>
 
       <div className="rounded-xl border border-white/[0.08] bg-[#202126] overflow-hidden">
         <table className="w-full table-fixed text-sm">
           <thead>
             <tr className="bg-[#252730] text-[#cbd5e1]">
-              <th className="h-11 px-3 text-left">机构名称</th>
-              <th className="h-11 px-3 text-left">机构类型</th>
-              <th className="h-11 px-3 text-left">用户数</th>
-              <th className="h-11 px-3 text-left">Case 数</th>
-              <th className="h-11 px-3 text-left">WSI 数</th>
-              <th className="h-11 px-3 text-left">存储配额</th>
-              <th className="h-11 px-3 text-left">状态</th>
-              <th className="h-11 px-3 text-left">操作</th>
+              <th className="h-11 px-3 text-left" style={{ width: '18%' }}>机构名称</th>
+              <th className="h-11 px-3 text-left" style={{ width: '13%' }}>机构类型</th>
+              <th className="h-11 px-3 text-left" style={{ width: '9%' }}>用户数</th>
+              <th className="h-11 px-3 text-left" style={{ width: '10%' }}>Case 数</th>
+              <th className="h-11 px-3 text-left" style={{ width: '10%' }}>WSI 数</th>
+              <th className="h-11 px-3 text-left" style={{ width: '14%' }}>存储配额</th>
+              <th className="h-11 px-3 text-left" style={{ width: '10%' }}>状态</th>
+              <th className="h-11 px-3 text-left" style={{ width: '16%' }}>操作</th>
             </tr>
           </thead>
 
@@ -1489,9 +1508,30 @@ function OrganizationsPanel() {
                 <td className="h-11 px-3">{item.caseCount}</td>
                 <td className="h-11 px-3">{item.wsiCount}</td>
                 <td className="h-11 px-3">{item.quota}</td>
-                <td className="h-11 px-3"><StatusBadge status={item.status} /></td>
                 <td className="h-11 px-3">
-                  <button className="text-[#d292f4] hover:text-[#f0b7ff]">配置</button>
+                  <StatusToggle
+                    checked={item.status === '正常'}
+                    onClick={() => toggleOrganizationStatus(item.name)}
+                    title={item.status === '正常' ? '点击停用' : '点击启用'}
+                  />
+                </td>
+                <td className="h-11 px-3">
+                  <div className="flex items-center gap-4 whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => openEditModal(item)}
+                      className="text-[#d292f4] hover:text-[#f0b7ff]"
+                    >
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteOrganization(item.name)}
+                      className="text-[#fca5a5] hover:text-[#fecaca]"
+                    >
+                      删除
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1507,14 +1547,18 @@ function OrganizationsPanel() {
         )}
       </div>
 
-      {showCreateModal && (
+      {showOrgModal && (
         <div className="fixed inset-0 z-[140] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4">
           <div className="w-[720px] rounded-2xl border border-white/[0.08] bg-[#202126] shadow-[0_24px_80px_rgba(0,0,0,0.55)] overflow-hidden">
             <div className="h-16 px-6 border-b border-white/[0.06] flex items-center justify-between">
               <div>
-                <div className="text-[#f1f3f6] text-lg font-bold">新增机构</div>
+                <div className="text-[#f1f3f6] text-lg font-bold">
+                  {orgModalMode === 'create' ? '新增机构' : '编辑机构'}
+                </div>
                 <div className="text-[#64748b] text-xs mt-1">
-                  创建机构基础信息，Case 数与 WSI 数由平台数据自动统计。
+                  {orgModalMode === 'create'
+                    ? '创建机构基础信息，Case 数与 WSI 数由平台数据自动统计。'
+                    : '编辑机构基础信息，用户数、Case 数与 WSI 数由平台数据自动统计。'}
                 </div>
               </div>
 
@@ -1540,8 +1584,8 @@ function OrganizationsPanel() {
                     机构名称 <span className="text-[#ff8f8f]">*</span>
                   </label>
                   <input
-                    value={newOrgName}
-                    onChange={(event) => setNewOrgName(event.target.value)}
+                    value={orgName}
+                    onChange={(event) => setOrgName(event.target.value)}
                     className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
                     placeholder="请输入机构名称"
                   />
@@ -1552,8 +1596,8 @@ function OrganizationsPanel() {
                     机构类型 <span className="text-[#ff8f8f]">*</span>
                   </label>
                   <select
-                    value={newOrgType}
-                    onChange={(event) => setNewOrgType(event.target.value)}
+                    value={orgType}
+                    onChange={(event) => setOrgType(event.target.value)}
                     className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
                   >
                     <option value="病理中心">病理中心</option>
@@ -1566,24 +1610,12 @@ function OrganizationsPanel() {
                 </div>
 
                 <div>
-                  <label className="block text-sm text-[#cbd5e1] mb-2">用户数</label>
-                  <input
-                    value={newOrgUserCount}
-                    onChange={(event) => setNewOrgUserCount(event.target.value)}
-                    className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
-                    placeholder="默认 0"
-                    type="number"
-                    min={0}
-                  />
-                </div>
-
-                <div>
                   <label className="block text-sm text-[#cbd5e1] mb-2">
                     存储配额 <span className="text-[#ff8f8f]">*</span>
                   </label>
                   <input
-                    value={newOrgQuota}
-                    onChange={(event) => setNewOrgQuota(event.target.value)}
+                    value={orgQuota}
+                    onChange={(event) => setOrgQuota(event.target.value)}
                     className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
                     placeholder="例如：1 TB / 5 TB / 500 GB"
                   />
@@ -1592,8 +1624,8 @@ function OrganizationsPanel() {
                 <div>
                   <label className="block text-sm text-[#cbd5e1] mb-2">状态</label>
                   <select
-                    value={newOrgStatus}
-                    onChange={(event) => setNewOrgStatus(event.target.value as CommonStatus)}
+                    value={orgStatus}
+                    onChange={(event) => setOrgStatus(event.target.value as CommonStatus)}
                     className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
                   >
                     <option value="正常">正常</option>
@@ -1604,9 +1636,9 @@ function OrganizationsPanel() {
               </div>
 
               <div className="rounded-xl border border-[#8f35b7]/25 bg-[#8f35b7]/10 p-4">
-                <div className="text-[#d292f4] text-sm font-semibold mb-1">新增规则说明</div>
+                <div className="text-[#d292f4] text-sm font-semibold mb-1">机构配置说明</div>
                 <div className="text-[#94a3b8] text-xs leading-6">
-                  当前为前端原型：新增机构只会插入当前页面机构列表，不会真实创建组织或初始化成员。Case 数与 WSI 数应由平台根据该机构下已有数据自动统计，不应在新增机构时手动输入。正式系统中应接入机构编码、管理员绑定、存储配额校验和机构级数据权限。
+                  Case 数、WSI 数与用户数应由平台根据该机构下已有数据自动统计，不应在新增或编辑机构时手动输入。正式系统中应接入机构编码、管理员绑定、存储配额校验和机构级数据权限。
                 </div>
               </div>
             </div>
@@ -1622,11 +1654,11 @@ function OrganizationsPanel() {
 
               <button
                 type="button"
-                onClick={createOrganization}
+                onClick={saveOrganization}
                 className="h-9 px-4 rounded-md bg-[#8f35b7] text-white text-sm font-medium hover:bg-[#a64ed0] transition-all inline-flex items-center gap-2"
               >
                 <CheckCircle2 size={16} />
-                确定新增
+                {orgModalMode === 'create' ? '确定新增' : '保存修改'}
               </button>
             </div>
           </div>
@@ -1814,10 +1846,6 @@ function ModelManagementPanel() {
         </button>
       </div>
 
-      <div className="mb-3 text-[#64748b] text-xs">
-        当前共 {models.length} 个模型，筛选结果 {filteredModels.length} 条
-      </div>
-
       <div className="rounded-xl border border-white/[0.08] bg-[#202126] overflow-hidden">
         <table className="w-full table-fixed text-sm">
           <thead>
@@ -1842,19 +1870,17 @@ function ModelManagementPanel() {
                 <td className="h-12 px-3">{model.organization}</td>
                 <td className="h-12 px-3">{model.modelType}</td>
                 <td className="h-12 px-3 font-mono">{model.version}</td>
-                <td className="h-12 px-3"><ModelStatusBadge status={model.status} /></td>
+                <td className="h-12 px-3">
+                  <StatusToggle
+                    checked={model.status === '启用'}
+                    onClick={() => updateModelStatus(model.id, model.status === '启用' ? '停用' : '启用')}
+                    title={model.status === '启用' ? '点击停用' : '点击启用'}
+                  />
+                </td>
                 <td className="h-12 px-3"><ModelVisibilityBadge visibility={model.visibility} /></td>
                 <td className="h-12 px-3">{model.runCount.toLocaleString()}</td>
                 <td className="h-12 px-3">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <button
-                      type="button"
-                      onClick={() => updateModelStatus(model.id, model.status === '启用' ? '停用' : '启用')}
-                      className={model.status === '启用' ? 'text-[#fca5a5] hover:text-[#fecaca]' : 'text-[#84cc16] hover:text-[#bef264]'}
-                    >
-                      {model.status === '启用' ? '停用' : '启用'}
-                    </button>
-
+                  <div className="flex items-center gap-2 whitespace-nowrap">
                     <button
                       type="button"
                       onClick={() => updateModelVisibility(model.id, model.visibility === '公开' ? '隐藏' : '公开')}
@@ -1900,8 +1926,6 @@ function BasicSettingsPanel() {
   const [guestAnalysisLimit, setGuestAnalysisLimit] = useState('3');
   const [maxWsiSize, setMaxWsiSize] = useState('5');
   const [supportedFormats, setSupportedFormats] = useState('svs, sdpc, dcm, tiff');
-  const [defaultTheme, setDefaultTheme] = useState('dark');
-  const [uploadReview, setUploadReview] = useState('关闭');
   const [storageWarning, setStorageWarning] = useState('80');
   const [saveResult, setSaveResult] = useState('');
 
@@ -1928,34 +1952,8 @@ function BasicSettingsPanel() {
     <>
       <SectionTitle
         title="基础设置"
-        desc="配置平台通用规则，包括游客分析次数、上传限制、支持格式、默认主题和存储预警等。"
+        desc="配置平台通用规则，包括游客分析次数、上传限制、支持格式和存储预警等。"
       />
-
-      <div className="grid grid-cols-4 gap-4 mb-5">
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-          <div className="text-[#64748b] text-sm mb-3">游客分析次数</div>
-          <div className="text-[#f1f3f6] text-2xl font-bold">{guestAnalysisLimit} 次</div>
-          <div className="text-[#64748b] text-xs mt-2">游客模式可提交的分析任务次数。</div>
-        </div>
-
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-          <div className="text-[#64748b] text-sm mb-3">WSI 上传限制</div>
-          <div className="text-[#f1f3f6] text-2xl font-bold">{maxWsiSize} GB</div>
-          <div className="text-[#64748b] text-xs mt-2">单个切片文件大小上限。</div>
-        </div>
-
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-          <div className="text-[#64748b] text-sm mb-3">默认主题</div>
-          <div className="text-[#f1f3f6] text-2xl font-bold">{defaultTheme === 'dark' ? '暗色' : '亮色'}</div>
-          <div className="text-[#64748b] text-xs mt-2">新用户首次进入的默认主题。</div>
-        </div>
-
-        <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-          <div className="text-[#64748b] text-sm mb-3">存储预警</div>
-          <div className="text-[#f1f3f6] text-2xl font-bold">{storageWarning}%</div>
-          <div className="text-[#64748b] text-xs mt-2">达到阈值后触发平台提醒。</div>
-        </div>
-      </div>
 
       <div className="rounded-xl border border-white/[0.08] bg-[#202126] overflow-hidden">
         <div className="h-14 px-5 border-b border-white/[0.06] flex items-center justify-between">
@@ -2003,30 +2001,6 @@ function BasicSettingsPanel() {
                 className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
                 placeholder="svs, sdpc, dcm, tiff"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm text-[#cbd5e1] mb-2">默认主题</label>
-              <select
-                value={defaultTheme}
-                onChange={(event) => setDefaultTheme(event.target.value)}
-                className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
-              >
-                <option value="dark">暗色</option>
-                <option value="light">亮色</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm text-[#cbd5e1] mb-2">上传后人工审核</label>
-              <select
-                value={uploadReview}
-                onChange={(event) => setUploadReview(event.target.value)}
-                className="w-full h-10 rounded-md border border-white/[0.08] bg-[#17181d] px-3 text-sm text-[#e2e8f0] outline-none focus:border-[#8f35b7]"
-              >
-                <option value="开启">开启</option>
-                <option value="关闭">关闭</option>
-              </select>
             </div>
 
             <div>
