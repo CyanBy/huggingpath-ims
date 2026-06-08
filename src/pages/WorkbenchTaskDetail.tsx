@@ -341,6 +341,118 @@ const PieChart: FC<{ data: { label: string; value: number; color: string }[] }> 
   );
 };
 
+type DetailTaskStatus = '排队中' | '分析中' | '已停止' | '分析完成' | '失败';
+type DetailObjectType = 'Case' | 'WSI' | '研究项目';
+
+type DetailTaskModel = {
+  id: string;
+  name: string;
+  version: string;
+  status: '成功' | '运行中' | '排队中' | '失败';
+};
+
+type DetailTaskMeta = {
+  id: string;
+  taskName: string;
+  objectType: DetailObjectType;
+  status: DetailTaskStatus;
+  creator: string;
+  createdAt: string;
+  startedAt: string;
+  completedAt: string;
+  progress: string;
+  models: DetailTaskModel[];
+};
+
+const DETAIL_TASKS: DetailTaskMeta[] = [
+  {
+    id: 'TASK-20260520-001',
+    taskName: 'S-20260517-1906',
+    objectType: 'Case',
+    status: '分析中',
+    creator: 'Zhang San',
+    createdAt: '2026-05-20 14:10',
+    startedAt: '2026-05-20 14:12',
+    completedAt: '-',
+    progress: '62%',
+    models: [
+      { id: 'task-model-001', name: 'CellViT++', version: 'v1.2.0', status: '成功' },
+      { id: 'task-model-002', name: 'TME Analyzer', version: 'v0.9.5', status: '运行中' },
+    ],
+  },
+  {
+    id: 'TASK-20260520-002',
+    taskName: 'HE_lung_001.svs',
+    objectType: 'WSI',
+    status: '排队中',
+    creator: 'Zhang San',
+    createdAt: '2026-05-20 14:20',
+    startedAt: '-',
+    completedAt: '-',
+    progress: '0%',
+    models: [
+      { id: 'task-model-001', name: 'CellViT++', version: 'v1.2.0', status: '排队中' },
+    ],
+  },
+  {
+    id: 'TASK-20260520-003',
+    taskName: '乳腺癌 HER2 队列研究',
+    objectType: '研究项目',
+    status: '已停止',
+    creator: 'Zhang San',
+    createdAt: '2026-05-20 15:00',
+    startedAt: '2026-05-20 15:03',
+    completedAt: '-',
+    progress: '38%',
+    models: [
+      { id: 'task-model-001', name: 'CellViT++', version: 'v1.2.0', status: '成功' },
+      { id: 'task-model-002', name: 'TME Analyzer', version: 'v0.9.5', status: '成功' },
+      { id: 'task-model-003', name: 'HistoQC', version: 'v2.1.0', status: '运行中' },
+      { id: 'task-model-004', name: 'CellViT-SAM', version: 'v0.6.1', status: '排队中' },
+      { id: 'task-model-005', name: 'GastricNet', version: 'v1.4.2', status: '排队中' },
+    ],
+  },
+  {
+    id: 'TASK-20260520-004',
+    taskName: 'kidney_pas_002.tiff',
+    objectType: 'WSI',
+    status: '分析完成',
+    creator: 'Zhang San',
+    createdAt: '2026-05-20 15:30',
+    startedAt: '2026-05-20 15:31',
+    completedAt: '2026-05-20 15:46',
+    progress: '100%',
+    models: [
+      { id: 'task-model-001', name: 'HistoQC', version: 'v2.1.0', status: '成功' },
+      { id: 'task-model-002', name: 'CellViT-SAM', version: 'v0.6.1', status: '成功' },
+      { id: 'task-model-003', name: 'TME Analyzer', version: 'v0.9.5', status: '成功' },
+    ],
+  },
+  {
+    id: 'TASK-20260520-005',
+    taskName: 'S-20260209-6099',
+    objectType: 'Case',
+    status: '失败',
+    creator: 'Zhang San',
+    createdAt: '2026-05-20 16:05',
+    startedAt: '2026-05-20 16:06',
+    completedAt: '-',
+    progress: '12%',
+    models: [
+      { id: 'task-model-001', name: 'CellViT++', version: 'v1.2.0', status: '失败' },
+      { id: 'task-model-002', name: 'TME Analyzer', version: 'v0.9.5', status: '排队中' },
+    ],
+  },
+];
+
+const getDetailStatusClassName = (status: DetailTaskStatus) => {
+  if (status === '分析完成') return 'border-[#3f6212] bg-[#3f6212]/35 text-[#84cc16]';
+  if (status === '分析中') return 'border-[#8f35b7]/40 bg-[#8f35b7]/20 text-[#d292f4]';
+  if (status === '排队中') return 'border-[#334155] bg-[#334155]/45 text-[#cbd5e1]';
+  if (status === '已停止') return 'border-[#92400e] bg-[#92400e]/25 text-[#fbbf24]';
+  return 'border-[#991b1b] bg-[#991b1b]/30 text-[#fca5a5]';
+};
+
 /* ------------------------------------------------------------------ */
 /* Main Component                                                      */
 /* ------------------------------------------------------------------ */
@@ -350,6 +462,7 @@ const WorkbenchTaskDetail: FC = () => {
   const navigate = useNavigate();
 const location = useLocation();
 const { taskId } = useParams();
+const detailTask = DETAIL_TASKS.find((item) => item.id === taskId) ?? DETAIL_TASKS[2];
 
 const [isLoggedIn, setIsLoggedIn] = useState(() => {
   return localStorage.getItem('isLoggedIn') === 'true';
@@ -742,60 +855,59 @@ const goLogin = () => {
   <div className="space-y-3">
     <div className="rounded-lg border border-[#8f35b7]/25 bg-[#8f35b7]/10 p-3">
       <div className="text-[#64748b] text-xs mb-1">任务名称</div>
-      <div className="text-[#f1f3f6] text-sm font-semibold leading-6">
-        乳腺癌 HER2 队列分析
+      <div className="text-[#f1f3f6] text-sm font-semibold leading-6 break-words">
+        {detailTask.taskName}
       </div>
     </div>
 
     <div className="grid grid-cols-2 gap-2">
       <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
-        <div className="text-[#64748b] text-xs mb-1">任务编号</div>
-        <div className="text-[#e2e8f0] text-xs font-mono truncate">
-          {taskId || 'TASK-20260520-001'}
-        </div>
+        <div className="text-[#64748b] text-xs mb-1">对象类型</div>
+        <span className="h-6 px-2 rounded border border-[#8f35b7]/35 bg-[#8f35b7]/15 text-[#d292f4] text-xs inline-flex items-center">
+          {detailTask.objectType}
+        </span>
       </div>
 
       <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
         <div className="text-[#64748b] text-xs mb-1">任务状态</div>
-        <div className="inline-flex h-6 px-2 rounded border border-[#8f35b7]/40 bg-[#8f35b7]/20 text-[#d292f4] text-xs items-center">
-          分析中
-        </div>
+        <span className={`h-6 px-2 rounded border text-xs inline-flex items-center ${getDetailStatusClassName(detailTask.status)}`}>
+          {detailTask.status}
+        </span>
+      </div>
+    </div>
+
+    <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="text-[#64748b] text-xs">AI 模型</div>
+        {detailTask.models.length > 3 && (
+          <span className="text-[#8f35b7] text-xs" title={detailTask.models.map((model) => `${model.name} ${model.version}`).join('、')}>
+            +{detailTask.models.length - 3}
+          </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {detailTask.models.slice(0, 3).map((model) => (
+          <span
+            key={model.id}
+            className="max-w-full h-6 px-2 rounded border border-white/[0.08] bg-white/[0.04] text-[#cbd5e1] text-xs inline-flex items-center truncate"
+            title={`${model.name} ${model.version}`}
+          >
+            {model.name}
+          </span>
+        ))}
       </div>
     </div>
 
     <div className="grid grid-cols-2 gap-2">
       <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
-        <div className="text-[#64748b] text-xs mb-1">分析对象</div>
-        <div className="text-[#e2e8f0] text-sm">研究项目</div>
+        <div className="text-[#64748b] text-xs mb-1">创建人</div>
+        <div className="text-[#e2e8f0] text-sm truncate">{detailTask.creator}</div>
       </div>
 
       <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
-        <div className="text-[#64748b] text-xs mb-1">提交人</div>
-        <div className="text-[#e2e8f0] text-sm">Zhang San</div>
-      </div>
-    </div>
-
-    <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
-      <div className="text-[#64748b] text-xs mb-1">项目名称</div>
-      <div className="text-[#e2e8f0] text-sm leading-6">
-        乳腺癌 HER2 队列研究
-      </div>
-    </div>
-
-    <div className="grid grid-cols-3 gap-2">
-      <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
-        <div className="text-[#64748b] text-xs mb-1">Case</div>
-        <div className="text-[#f1f3f6] text-lg font-bold">12</div>
-      </div>
-
-      <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
-        <div className="text-[#64748b] text-xs mb-1">WSI</div>
-        <div className="text-[#f1f3f6] text-lg font-bold">33</div>
-      </div>
-
-      <div className="rounded-lg border border-white/[0.08] bg-[#17181d] p-3">
-        <div className="text-[#64748b] text-xs mb-1">进度</div>
-        <div className="text-[#f1f3f6] text-lg font-bold">62%</div>
+        <div className="text-[#64748b] text-xs mb-1">当前进度</div>
+        <div className="text-[#f1f3f6] text-sm font-semibold">{detailTask.progress}</div>
       </div>
     </div>
 
@@ -803,22 +915,22 @@ const goLogin = () => {
       <div className="text-[#64748b] text-xs mb-2">执行时间</div>
       <div className="space-y-1.5 text-xs">
         <div className="flex justify-between gap-2">
-          <span className="text-[#64748b]">提交时间</span>
-          <span className="text-[#e2e8f0] font-mono">2026-05-20 14:25</span>
+          <span className="text-[#64748b]">创建时间</span>
+          <span className="text-[#e2e8f0] font-mono">{detailTask.createdAt}</span>
         </div>
         <div className="flex justify-between gap-2">
           <span className="text-[#64748b]">开始时间</span>
-          <span className="text-[#e2e8f0] font-mono">2026-05-20 14:26</span>
+          <span className="text-[#e2e8f0] font-mono">{detailTask.startedAt}</span>
         </div>
         <div className="flex justify-between gap-2">
           <span className="text-[#64748b]">完成时间</span>
-          <span className="text-[#e2e8f0] font-mono">-</span>
+          <span className="text-[#e2e8f0] font-mono">{detailTask.completedAt}</span>
         </div>
       </div>
     </div>
 
     <div className="rounded-lg border border-[#f59e0b]/25 bg-[#f59e0b]/10 px-3 py-2 text-[11px] leading-5 text-[#fbbf24]">
-      任务详情页为只读视图，不允许修改分析对象、模型或参数。
+      任务详情页为只读视图，不允许修改任务名称、对象类型或模型配置。
     </div>
   </div>
 </PanelSection>
@@ -827,72 +939,33 @@ const goLogin = () => {
           <PanelSection>
             <SectionHeader title="AI模型" />
 
-            <div className="mb-3 p-3 rounded-lg border border-[#8f35b7]/20 bg-gradient-to-r from-[#8f35b7]/10 to-[#a64ed0]/5">
-              <div className="flex items-center gap-2">
-                <Sparkles size={14} className="text-[#8f35b7] shrink-0" />
-                <span className="text-[#b86bdd] text-[13px]">
-                  根据当前任务展示实际参与分析的模型，模型不可在详情页修改。
-                </span>
-              </div>
-            </div>
-
             <div className="flex flex-col gap-2 max-h-[260px] overflow-y-auto pr-1">
-              {[
-                {
-                  id: 'task-model-001',
-                  name: 'CellViT++',
-                  status: '成功',
-                  tags: ['细胞核检测', '分割', 'v1.2.0'],
-                  summary: '检出细胞核 18,236 个，疑似阳性细胞 4,281 个。',
-                },
-                {
-                  id: 'task-model-002',
-                  name: 'TME Analyzer',
-                  status: '成功',
-                  tags: ['肿瘤微环境', '空间分析', 'v0.9.5'],
-                  summary: '识别免疫细胞高密度热点 8 个。',
-                },
-                {
-                  id: 'task-model-003',
-                  name: 'CellViT-SAM',
-                  status: '运行中',
-                  tags: ['组织区域分割', 'ROI', 'v0.6.1'],
-                  summary: '正在生成肿瘤区、间质区与坏死样区域边界。',
-                },
-                {
-                  id: 'task-model-004',
-                  name: 'HistoQC',
-                  status: '排队中',
-                  tags: ['切片质控', '模糊检测', 'v2.1.0'],
-                  summary: '等待检测模糊、折叠、气泡、污染与空白区域。',
-                },
-              ].map((m) => (
+              {detailTask.models.map((m) => (
                 <div
                   key={m.id}
-                  className="flex items-start gap-3 p-3 rounded-lg transition-all duration-150 border bg-[#1f2024] border-white/[0.04]"
+                  className="flex items-center gap-3 p-3 rounded-lg transition-all duration-150 border bg-[#1f2024] border-white/[0.04]"
                 >
                   <span
                     className={cn(
-                      'w-2.5 h-2.5 rounded-full shrink-0 mt-1.5',
+                      'w-2.5 h-2.5 rounded-full shrink-0',
                       m.status === '成功'
                         ? 'bg-[#22c55e]'
                         : m.status === '运行中'
                           ? 'bg-[#8f35b7] animate-pulse'
-                          : 'bg-[#64748b]'
+                          : m.status === '失败'
+                            ? 'bg-[#ef4444]'
+                            : 'bg-[#64748b]'
                     )}
                   />
 
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-[#e2e8f0] text-sm font-medium">{m.name}</div>
-                      <span className="h-5 px-2 rounded border border-white/[0.08] bg-white/[0.04] text-[#94a3b8] text-[11px] inline-flex items-center">
-                        {m.status}
-                      </span>
-                    </div>
-
-                    <div className="text-[#64748b] text-xs mt-1">{m.tags.join(' · ')}</div>
-                    <div className="text-[#94a3b8] text-xs leading-5 mt-2">{m.summary}</div>
+                    <div className="text-[#e2e8f0] text-sm font-medium truncate">{m.name}</div>
+                    <div className="text-[#64748b] text-xs mt-1 font-mono">{m.version}</div>
                   </div>
+
+                  <span className="h-6 px-2 rounded border border-white/[0.08] bg-white/[0.04] text-[#94a3b8] text-[11px] inline-flex items-center shrink-0">
+                    {m.status}
+                  </span>
                 </div>
               ))}
             </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { FileImage, Plus, Search, UploadCloud } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 type WsiStatus = '已上传' | '待绑定' | '异常';
 
@@ -62,22 +63,9 @@ const initialWsiRows: WsiRow[] = [
   },
 ];
 
-function StatusBadge({ status }: { status: WsiStatus }) {
-  const className =
-    status === '已上传'
-      ? 'border-[#3f6212] bg-[#3f6212]/35 text-[#84cc16]'
-      : status === '待绑定'
-        ? 'border-[#8f35b7]/40 bg-[#8f35b7]/20 text-[#d292f4]'
-        : 'border-[#991b1b] bg-[#991b1b]/30 text-[#fca5a5]';
-
-  return (
-    <span className={`h-6 px-2 rounded border text-xs inline-flex items-center ${className}`}>
-      {status}
-    </span>
-  );
-}
-
 export default function WorkbenchWsiManagement() {
+  const navigate = useNavigate();
+
   const [keyword, setKeyword] = useState('');
   const [wsiRows, setWsiRows] = useState<WsiRow[]>(initialWsiRows);
 
@@ -104,6 +92,26 @@ export default function WorkbenchWsiManagement() {
     };
 
     setWsiRows((prev) => [newWsi, ...prev]);
+  };
+
+  const addWsiToAnalysis = (item: WsiRow) => {
+    localStorage.setItem(
+      'pendingWorkbenchAnalysisSlide',
+      JSON.stringify({
+        id: item.id,
+        fileName: item.fileName,
+        size: item.size,
+        stain: item.stain,
+        magnification: item.magnification,
+        boundCase: item.boundCase,
+      }),
+    );
+
+    navigate('/workbench');
+  };
+
+  const deleteWsi = (id: string) => {
+    setWsiRows((prev) => prev.filter((item) => item.id !== id));
   };
 
   return (
@@ -188,28 +196,25 @@ export default function WorkbenchWsiManagement() {
         <table className="w-full table-fixed border-collapse text-sm">
           <thead>
             <tr className="bg-[#252730] text-[#cbd5e1]">
-              <th className="h-11 px-3 text-left font-semibold" style={{ width: '24%' }}>
+              <th className="h-11 px-3 text-left font-semibold" style={{ width: '22%' }}>
                 文件名
               </th>
-              <th className="h-11 px-3 text-left font-semibold" style={{ width: '8%' }}>
+              <th className="h-11 px-3 text-left font-semibold" style={{ width: '7%' }}>
                 格式
               </th>
-              <th className="h-11 px-3 text-left font-semibold" style={{ width: '10%' }}>
+              <th className="h-11 px-3 text-left font-semibold" style={{ width: '9%' }}>
                 文件大小
               </th>
-              <th className="h-11 px-3 text-left font-semibold" style={{ width: '10%' }}>
+              <th className="h-11 px-3 text-left font-semibold" style={{ width: '8%' }}>
                 染色
               </th>
-              <th className="h-11 px-3 text-left font-semibold" style={{ width: '10%' }}>
+              <th className="h-11 px-3 text-left font-semibold" style={{ width: '8%' }}>
                 倍率
               </th>
-              <th className="h-11 px-3 text-left font-semibold" style={{ width: '18%' }}>
+              <th className="h-11 px-3 text-left font-semibold" style={{ width: '20%' }}>
                 绑定 Case
               </th>
-              <th className="h-11 px-3 text-left font-semibold" style={{ width: '10%' }}>
-                状态
-              </th>
-              <th className="h-11 px-3 text-left font-semibold" style={{ width: '10%' }}>
+              <th className="h-11 px-3 text-left font-semibold" style={{ width: '23%' }}>
                 操作
               </th>
             </tr>
@@ -221,25 +226,48 @@ export default function WorkbenchWsiManagement() {
                 key={item.id}
                 className="border-b border-white/[0.06] text-[#d1d5db] hover:bg-white/[0.025]"
               >
-                <td className="h-11 px-3 font-mono text-[#e5e7eb]">{item.fileName}</td>
+                <td className="h-11 px-3 font-mono text-[#e5e7eb] truncate">{item.fileName}</td>
                 <td className="h-11 px-3">{item.format}</td>
                 <td className="h-11 px-3">{item.size}</td>
                 <td className="h-11 px-3">{item.stain}</td>
                 <td className="h-11 px-3">{item.magnification}</td>
                 <td className="h-11 px-3">{item.boundCase}</td>
                 <td className="h-11 px-3">
-                  <StatusBadge status={item.status} />
-                </td>
-                <td className="h-11 px-3">
-                  <button
-                    type="button"
-                    className="text-[#d292f4] hover:text-[#f0b7ff] text-sm"
-                  >
-                    查看
-                  </button>
+                  <div className="flex items-center gap-4 whitespace-nowrap">
+                    <button
+                      type="button"
+                      className="text-[#d292f4] hover:text-[#f0b7ff] text-sm"
+                    >
+                      查看
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => addWsiToAnalysis(item)}
+                      className="text-[#d292f4] hover:text-[#f0b7ff] text-sm"
+                    >
+                      加入分析
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => deleteWsi(item.id)}
+                      className="text-[#ff9c9c] hover:text-[#fecaca] text-sm"
+                    >
+                      删除
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
+
+            {filteredRows.length === 0 && (
+              <tr>
+                <td colSpan={7} className="h-24 text-center text-[#64748b]">
+                  暂无匹配的 WSI 文件
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

@@ -10,11 +10,11 @@ const navLinks = [
 ];
 
 const workbenchLinks = [
-  { label: '分析队列', path: '/workbench/tasks' },
+  { label: '研究项目管理', path: '/workbench/projects' },
   { label: 'Case 管理', path: '/workbench/cases' },
   { label: 'WSI 管理', path: '/workbench/wsi' },
-  { label: '研究项目管理', path: '/workbench/projects' },
    { label: 'AI 工作台', path: '/workbench' },
+     { label: '分析队列', path: '/workbench/tasks' },
 ];
 
 export default function Navbar() {

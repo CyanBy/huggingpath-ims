@@ -1244,34 +1244,6 @@ function ProjectDetail({
 
       {activeTab === 'records' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-4 gap-4">
-            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-              <div className="text-[#64748b] text-sm mb-3">当前分析版本</div>
-              <div className="text-[#f1f3f6] text-xl font-bold truncate">{selectedAnalysisVersion.title}</div>
-              <div className="text-[#64748b] text-xs mt-2">{selectedAnalysisVersion.time}</div>
-            </div>
-
-            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-              <div className="text-[#64748b] text-sm mb-3">分析 WSI 数</div>
-              <div className="text-[#f1f3f6] text-2xl font-bold">{selectedAnalysisVersion.wsiCount}</div>
-              <div className="text-[#64748b] text-xs mt-2">当前时间点纳入分析的切片数。</div>
-            </div>
-
-            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-              <div className="text-[#64748b] text-sm mb-3">AI 发现数</div>
-              <div className="text-[#f1f3f6] text-2xl font-bold">{selectedAnalysisVersion.aiFindingCount}</div>
-              <div className="text-[#64748b] text-xs mt-2">区域、热点、质控提示等聚合发现。</div>
-            </div>
-
-            <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-4">
-              <div className="text-[#64748b] text-sm mb-3">分析状态</div>
-              <div>{renderAnalysisStatus(selectedAnalysisVersion.status)}</div>
-              <div className="text-[#64748b] text-xs mt-2">
-                成功 {selectedCompletedCount} · 运行中 {selectedRunningCount} · 排队中 {selectedQueuedCount} · 失败 {selectedFailedCount}
-              </div>
-            </div>
-          </div>
-
           <div className="rounded-xl border border-white/[0.08] bg-[#202126] p-5">
             <div className="flex items-start justify-between gap-4 mb-5">
               <div>

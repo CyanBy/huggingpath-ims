@@ -108,23 +108,6 @@ function SexBadge({ sex }: { sex: CaseRow['sex'] }) {
   );
 }
 
-function StatusBadge({ status }: { status: CaseStatus }) {
-  const cls =
-    status === '就绪'
-      ? 'border-[#3f6212] bg-[#3f6212]/45 text-[#84cc16]'
-      : status === '处理中'
-        ? 'border-[#8f35b7]/40 bg-[#8f35b7]/20 text-[#d292f4]'
-        : status === '待处理'
-          ? 'border-white/[0.08] bg-white/[0.05] text-[#94a3b8]'
-          : 'border-[#991b1b] bg-[#991b1b]/30 text-[#fca5a5]';
-
-  return (
-    <span className={`h-6 px-2 rounded inline-flex items-center text-xs border ${cls}`}>
-      {status}
-    </span>
-  );
-}
-
 function FieldLabel({ children, required }: { children: string; required?: boolean }) {
   return (
     <label className="block text-sm text-[#cbd5e1] mb-2">
@@ -159,6 +142,29 @@ export default function WorkbenchCaseLibrary() {
       return text.includes(q);
     });
   }, [caseRows, keyword]);
+  const addCaseToAnalysis = (item: CaseRow) => {
+    localStorage.setItem(
+      'pendingWorkbenchAnalysisCase',
+      JSON.stringify({
+        id: item.sampleId,
+        pathologyNo: item.sampleId,
+        patientName: item.sampleId,
+        gender: item.sex,
+        age: 0,
+        organ: item.site,
+        caseType: item.samplingMethod,
+        slideCount: item.wsiCount,
+        date: item.createdAt,
+      }),
+    );
+
+    navigate('/workbench');
+  };
+
+  const deleteCase = (sampleId: string) => {
+    setCaseRows((prev) => prev.filter((item) => item.sampleId !== sampleId));
+  };
+
 
   const resetCreateForm = () => {
     setNewSampleId('');
@@ -268,9 +274,8 @@ export default function WorkbenchCaseLibrary() {
                 <th className="h-10 px-3 text-left font-semibold" style={{ width: '7%' }}>年龄段</th>
                 <th className="h-10 px-3 text-left font-semibold" style={{ width: '6%' }}>性别</th>
                 <th className="h-10 px-3 text-left font-semibold" style={{ width: '7%' }}>WSI 数</th>
-                <th className="h-10 px-3 text-left font-semibold" style={{ width: '8%' }}>状态</th>
                 <th className="h-10 px-3 text-left font-semibold" style={{ width: '11%' }}>创建时间</th>
-                <th className="h-10 px-3 text-left font-semibold" style={{ width: '8%' }}>操作</th>
+                <th className="h-10 px-3 text-left font-semibold" style={{ width: '22%' }}>操作</th>
               </tr>
             </thead>
 
@@ -293,18 +298,33 @@ export default function WorkbenchCaseLibrary() {
                       {item.wsiCount}
                     </span>
                   </td>
-                  <td className="h-10 px-3">
-                    <StatusBadge status={item.status} />
-                  </td>
                   <td className="h-10 px-3">{item.createdAt}</td>
                   <td className="h-10 px-3">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/cases/${item.sampleId}`)}
-                      className="text-[#d292f4] hover:text-[#f0b7ff] text-sm"
-                    >
-                      查看
-                    </button>
+                    <div className="flex items-center gap-4 whitespace-nowrap">
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/cases/${item.sampleId}`)}
+                        className="text-[#d292f4] hover:text-[#f0b7ff] text-sm"
+                      >
+                        查看
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => addCaseToAnalysis(item)}
+                        className="text-[#d292f4] hover:text-[#f0b7ff] text-sm"
+                      >
+                        加入分析
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => deleteCase(item.sampleId)}
+                        className="text-[#ff9c9c] hover:text-[#fecaca] text-sm"
+                      >
+                        删除
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

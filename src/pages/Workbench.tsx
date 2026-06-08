@@ -50,23 +50,6 @@ interface CaseItem {
 type CaseQueueItem = CaseItem & {
   queueType: 'case';
 };
-type AnalysisObjectType = 'slide' | 'case' | 'project';
-
-type SelectedAnalysisObject = {
-  id: string;
-  name: string;
-  type: AnalysisObjectType;
-  desc: string;
-  size?: string;
-};
-
-type WorkbenchRouteState = {
-  source?: 'model_center';
-  runModelId?: string;
-  runModelName?: string;
-  analysisObjectType?: AnalysisObjectType;
-  analysisObjects?: SelectedAnalysisObject[];
-};
 
 interface StandaloneSlideQueueItem {
   queueType: 'slide';
@@ -87,7 +70,6 @@ interface ProjectQueueItem {
   modelCount: number;
   status: 'ready';
 }
-
 
 type QueueItem = CaseQueueItem | StandaloneSlideQueueItem | ProjectQueueItem;
 
@@ -130,6 +112,39 @@ interface ClassificationRow {
 /* Mock Data                                                           */
 /* ------------------------------------------------------------------ */
 
+const MOCK_CASES: CaseItem[] = [
+  {
+    id: 'CAS-2025-001',
+    pathologyNo: '25AH032093',
+    patientName: '患者A',
+    gender: '男',
+    age: 58,
+    organ: '胃',
+    caseType: '活检',
+    slideCount: 3,
+    date: '2025.01.15',
+    slides: [
+      { id: 'SL-001', name: 'HE_stomach_01.svs', stain: 'HE', magnification: '40X', size: '1.2 GB', status: 'analyzed' },
+      { id: 'SL-002', name: 'IHC_Ki67_01.svs', stain: 'Ki67', magnification: '40X', size: '980 MB', status: 'pending' },
+      { id: 'SL-003', name: 'IHC_PDL1_01.svs', stain: 'PD-L1', magnification: '40X', size: '1.1 GB', status: 'pending' },
+    ],
+  },
+  {
+    id: 'CAS-2025-002',
+    pathologyNo: '25BR018762',
+    patientName: '患者B',
+    gender: '女',
+    age: 46,
+    organ: '乳腺',
+    caseType: '活检',
+    slideCount: 2,
+    date: '2025.01.14',
+    slides: [
+      { id: 'SL-004', name: 'HE_breast_01.svs', stain: 'HE', magnification: '40X', size: '2.3 GB', status: 'pending' },
+      { id: 'SL-005', name: 'HE_breast_02.svs', stain: 'HE', magnification: '40X', size: '2.1 GB', status: 'pending' },
+    ],
+  },
+];
 const toCaseQueueItem = (item: CaseItem): CaseQueueItem => ({
   ...item,
   queueType: 'case',
@@ -211,12 +226,6 @@ const CLASSIFICATION_DATA: ClassificationRow[] = [
 ];
 
 
-
-const CLINICAL_PARAMS = [
-  { id: 'roi', label: '分析区域', type: 'select' as const, default: 'auto', options: ['全片分析', '自动检测组织区域', '手动选择ROI'], description: '选择需要AI分析的组织区域范围' },
-  { id: 'confidence', label: '置信度阈值', type: 'range' as const, default: 0.5, min: 0.1, max: 0.9, step: 0.01, description: '阈值越高，结果越严格' },
-  { id: 'analysis_region', label: '分析区域选择', type: 'select' as const, default: 'auto', options: ['自动选择', '上皮区域', '全组织区域'], description: '自动或手动选择分析区域' },
-];
 
 const MAGNIFICATIONS = [0.5, 1, 4, 10, 20, 40, 80];
 
@@ -328,7 +337,6 @@ const Workbench: FC = () => {
   /* ---- Mode ---- */
   const navigate = useNavigate();
 const location = useLocation();
-const routeState = location.state as WorkbenchRouteState | null;
 
 const [isLoggedIn, setIsLoggedIn] = useState(() => {
   return localStorage.getItem('isLoggedIn') === 'true';
@@ -352,73 +360,6 @@ const [addTaskType, setAddTaskType] = useState<'slide' | 'case' | 'project'>('sl
 
   /* ---- Model ---- */
   const [selectedModel, setSelectedModel] = useState<string>('mod-1');
-useEffect(() => {
-  if (!routeState?.source || routeState.source !== 'model_center') return;
-  if (!routeState.analysisObjects?.length) return;
-
-  const nextQueueItems: QueueItem[] = routeState.analysisObjects.map((item) => {
-    if (item.type === 'slide') {
-      return {
-        queueType: 'slide',
-        id: item.id,
-        fileName: item.name,
-        size: item.size || item.desc,
-        progress: 100,
-        status: 'ready',
-      };
-    }
-
-    if (item.type === 'case') {
-      return {
-        queueType: 'case',
-        id: item.id,
-        pathologyNo: item.id,
-        patientName: '模拟病例',
-        gender: '女',
-        age: 52,
-        organ: '乳腺',
-        caseType: '活检',
-        slideCount: 3,
-        date: '2026.05.20',
-        slides: [
-          {
-            id: `${item.id}-SL-001`,
-            name: `${item.id}_HE_001.svs`,
-            stain: 'HE',
-            magnification: '40X',
-            size: '1.2 GB',
-            status: 'pending',
-          },
-        ],
-      };
-    }
-
-    return {
-      queueType: 'project',
-      id: item.id,
-      projectNo: item.id,
-      name: item.name,
-      caseCount: 12,
-      wsiCount: 33,
-      modelCount: 1,
-      status: 'ready',
-    };
-  });
-
-  setQueueCases(nextQueueItems);
-
-  const matchedModel = MOCK_MODELS.find(
-    (model) =>
-      model.name === routeState.runModelName ||
-      model.id === routeState.runModelId
-  );
-
-  if (matchedModel) {
-    setSelectedModel(matchedModel.id);
-  }
-
-  window.history.replaceState({}, document.title);
-}, [routeState]);
 
   /* ---- WSI Viewer ---- */
   const [zoom, setZoom] = useState(0.35);
@@ -441,16 +382,6 @@ useEffect(() => {
   /* ---- Report ---- */
   const [showReport, setShowReport] = useState(false);
 
-  /* ---- Parameters ---- */
-  const [paramValues, setParamValues] = useState<Record<string, any>>({
-    batch_size: 16,
-    confidence: 0.5,
-    roi: 'auto',
-    min_size: 5,
-    gpu_accelerate: true,
-    nms_threshold: 0.3,
-    analysis_region: 'auto',
-  });
 
   /* ---- WSI Mouse handlers ---- */
   const handleMouseDown = useCallback(
@@ -541,6 +472,94 @@ useEffect(() => {
 
   return () => clearInterval(interval);
 }, []);
+useEffect(() => {
+  const rawPendingCase = localStorage.getItem('pendingWorkbenchAnalysisCase');
+  if (!rawPendingCase) return;
+
+  try {
+    const parsed = JSON.parse(rawPendingCase) as {
+      id?: string;
+      pathologyNo?: string;
+      patientName?: string;
+      gender?: string;
+      age?: number;
+      organ?: string;
+      caseType?: string;
+      slideCount?: number;
+      date?: string;
+    };
+
+    if (!parsed.id) return;
+
+    const pendingCase: CaseQueueItem = {
+      queueType: 'case',
+      id: parsed.id,
+      pathologyNo: parsed.pathologyNo || parsed.id,
+      patientName: parsed.patientName || '待分析病例',
+      gender: parsed.gender || '未知',
+      age: Number(parsed.age || 0),
+      organ: parsed.organ || '未知',
+      caseType: parsed.caseType || '未分类',
+      slideCount: Number(parsed.slideCount || 1),
+      date: parsed.date || '刚刚',
+      slides: Array.from({ length: Math.max(Number(parsed.slideCount || 1), 1) }).map((_, index) => ({
+        id: `${parsed.id}-SL-${index + 1}`,
+        name: `${parsed.id}_WSI_${index + 1}.svs`,
+        stain: 'HE',
+        magnification: '40X',
+        size: '1.2 GB',
+        status: 'pending' as const,
+      })),
+    };
+
+    setQueueCases((prev) => {
+      if (prev.some((item) => item.id === pendingCase.id)) return prev;
+      return [pendingCase, ...prev];
+    });
+    setExpandedCase(pendingCase.id);
+    setSelectedSlide(pendingCase.slides[0]?.id || '');
+  } catch {
+    // Ignore malformed prototype payload.
+  } finally {
+    localStorage.removeItem('pendingWorkbenchAnalysisCase');
+  }
+}, []);
+
+useEffect(() => {
+  const rawPendingSlide = localStorage.getItem('pendingWorkbenchAnalysisSlide');
+  if (!rawPendingSlide) return;
+
+  try {
+    const parsed = JSON.parse(rawPendingSlide) as {
+      id?: string;
+      fileName?: string;
+      size?: string;
+    };
+
+    if (!parsed.id || !parsed.fileName) return;
+
+    const pendingSlide: StandaloneSlideQueueItem = {
+      queueType: 'slide',
+      id: parsed.id,
+      fileName: parsed.fileName,
+      size: parsed.size || '未知大小',
+      progress: 100,
+      status: 'ready',
+    };
+
+    setQueueCases((prev) => {
+      if (prev.some((item) => item.id === pendingSlide.id)) return prev;
+      return [pendingSlide, ...prev];
+    });
+    setExpandedCase('');
+    setSelectedSlide(pendingSlide.id);
+  } catch {
+    // Ignore malformed prototype payload.
+  } finally {
+    localStorage.removeItem('pendingWorkbenchAnalysisSlide');
+  }
+}, []);
+
   /* ---- Derived ---- */
 const activeCase = queueCases.find(
   (c): c is CaseQueueItem => c.queueType === 'case' && c.id === expandedCase,
@@ -612,7 +631,7 @@ const handleConfirmAddTask = () => {
     setShowAddTaskModal(false);
   }
 };
-
+  const activeTask = tasks.find((t) => t.id === selectedTask);
   const createAnalysisTask = () => {
   const selectedModelItem = MOCK_MODELS.find((model) => model.id === selectedModel);
 
@@ -665,76 +684,6 @@ const goLogin = () => {
     value: d.count,
     color: d.color,
   }));
-
-  /* ---- Parameter render helpers ---- */
-  const renderParamInput = (param: any) => {
-    const val = paramValues[param.id];
-    const update = (v: any) => setParamValues((p) => ({ ...p, [param.id]: v }));
-
-    switch (param.type) {
-      case 'string':
-        return (
-          <input
-            type="text"
-            value={val}
-            onChange={(e) => update(e.target.value)}
-            className="input-field w-full h-10 text-sm"
-          />
-        );
-      case 'number':
-        return (
-          <input
-            type="number"
-            value={val}
-            min={param.min}
-            max={param.max}
-            onChange={(e) => update(Number(e.target.value))}
-            className="input-field w-full h-10 text-sm tab-nums"
-          />
-        );
-      case 'range':
-        return (
-          <div className="flex items-center gap-3">
-            <input
-              type="range"
-              min={param.min}
-              max={param.max}
-              step={param.step || 0.01}
-              value={val}
-              onChange={(e) => update(Number(e.target.value))}
-              className="flex-1 accent-[#8f35b7] h-2"
-            />
-            <span className="text-[#8f35b7] font-mono text-sm tab-nums min-w-[48px] text-right">
-              {val}
-            </span>
-          </div>
-        );
-      case 'select':
-        return (
-          <select
-            value={val}
-            onChange={(e) => update(e.target.value)}
-            className="input-field w-full h-10 text-sm appearance-none cursor-pointer"
-            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 10px center' }}
-          >
-            {param.options.map((opt: string) => (
-              <option key={opt} value={opt === '自动检测组织区域' ? 'auto' : opt === '全片分析' ? 'whole' : opt === '手动选择ROI' ? 'manual' : opt === '自动选择' ? 'auto' : opt === '上皮区域' ? 'epithelial' : opt === '全组织区域' ? 'whole_tissue' : opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
-        );
-      case 'boolean':
-        return (
-          <div className="flex items-center justify-between">
-            <span className="text-[#94a3b8] text-sm">{param.description}</span>
-            <ToggleSwitch checked={val} onChange={update} />
-          </div>
-        );
-      default:
-        return null;
-    }
-  };
 
   /* ---- Status helpers ---- */
   const statusBorder = (status: string) => {
@@ -1058,27 +1007,6 @@ const goLogin = () => {
                   </div>
                 );
               })}
-            </div>
-            <button className="btn-secondary w-full mt-3 text-xs h-8">
-              <Settings size={14} />
-              进入模型中心
-            </button>
-          </PanelSection>
-
-          {/* Parameters */}
-          <PanelSection last>
-            <SectionHeader title="分析参数" />
-            <div className="flex flex-col">
-              {CLINICAL_PARAMS.map((param) => (
-                <div key={param.id} className="py-3 border-b border-white/[0.04] last:border-0">
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-[#e2e8f0] text-sm">{param.label}</label>
-                   
-                  </div>
-                  <div className="mb-1">{renderParamInput(param)}</div>
-                 
-                </div>
-              ))}
             </div>
           </PanelSection>
         </div>
