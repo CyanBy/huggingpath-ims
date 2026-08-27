@@ -1,0 +1,4 @@
+Source: OpenSlide test data, CMU-1-Small-Region.svs
+URL: https://openslide.cs.cmu.edu/download/openslide-testdata/Aperio/CMU-1-Small-Region.svs
+License: CC0 1.0 Universal
+Converted to JPEG for the local interactive viewer prototype.
