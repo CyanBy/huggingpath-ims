@@ -1,3 +1,12 @@
+export type PublicCaseSlide = {
+  id: string
+  fileName: string
+  stain: string
+  format: string
+  size: string
+  status: '未分析' | '分析中' | '分析完成' | '分析失败'
+}
+
 export type PublicCase = {
   caseId: string
   description: string
@@ -8,14 +17,26 @@ export type PublicCase = {
   slideCount: number
   status: '未分析' | '分析中' | '分析完成' | '分析失败'
   createdAt: string
+  slides: PublicCaseSlide[]
 }
 
 export const publicCases: PublicCase[] = [
-  { caseId: '25AH032093', description: '门诊 · 胃活检', patient: '患者A', patientMeta: '男 · 58岁', site: '胃', sampling: '活检', slideCount: 3, status: '分析完成', createdAt: '04-28' },
-  { caseId: '25BR018762', description: '住院 · 乳腺穿刺', patient: '患者B', patientMeta: '女 · 46岁', site: '乳腺', sampling: '活检', slideCount: 1, status: '未分析', createdAt: '04-27' },
-  { caseId: '25CX009871', description: '宫颈 TCT', patient: '患者C', patientMeta: '女 · 39岁', site: '宫颈', sampling: '细胞学', slideCount: 1, status: '分析中', createdAt: '04-26' },
-  { caseId: '25PR004356', description: '前列腺穿刺', patient: '患者D', patientMeta: '男 · 67岁', site: '前列腺', sampling: '活检', slideCount: 0, status: '未分析', createdAt: '04-25' },
-  { caseId: '25LG010882', description: '肺穿刺', patient: '患者E', patientMeta: '男 · 61岁', site: '肺', sampling: '活检', slideCount: 2, status: '分析失败', createdAt: '04-24' },
+  { caseId: '25AH032093', description: '门诊 · 胃活检', patient: '患者A', patientMeta: '男 · 58岁', site: '胃', sampling: '活检', slideCount: 3, status: '分析完成', createdAt: '04-28', slides: [
+    { id: 'pub-wsi-001', fileName: '25AH032093_HE_001.svs', stain: 'H&E', format: 'SVS', size: '1.32 GB', status: '分析完成' },
+    { id: 'pub-wsi-002', fileName: '25AH032093_IHC_Ki67_001.sdpc', stain: 'Ki-67', format: 'SDPC', size: '864 MB', status: '分析完成' },
+    { id: 'pub-wsi-003', fileName: '25AH032093_PAS_001.tiff', stain: 'PAS', format: 'TIFF', size: '742 MB', status: '分析完成' },
+  ] },
+  { caseId: '25BR018762', description: '住院 · 乳腺穿刺', patient: '患者B', patientMeta: '女 · 46岁', site: '乳腺', sampling: '活检', slideCount: 1, status: '未分析', createdAt: '04-27', slides: [
+    { id: 'pub-wsi-004', fileName: '25BR018762_IHC_HER2_001.sdpc', stain: 'HER2', format: 'SDPC', size: '906 MB', status: '未分析' },
+  ] },
+  { caseId: '25CX009871', description: '宫颈 TCT', patient: '患者C', patientMeta: '女 · 39岁', site: '宫颈', sampling: '细胞学', slideCount: 1, status: '分析中', createdAt: '04-26', slides: [
+    { id: 'pub-wsi-005', fileName: '25CX009871_TCT_001.svs', stain: 'TCT', format: 'SVS', size: '628 MB', status: '分析中' },
+  ] },
+  { caseId: '25PR004356', description: '前列腺穿刺', patient: '患者D', patientMeta: '男 · 67岁', site: '前列腺', sampling: '活检', slideCount: 0, status: '未分析', createdAt: '04-25', slides: [] },
+  { caseId: '25LG010882', description: '肺穿刺', patient: '患者E', patientMeta: '男 · 61岁', site: '肺', sampling: '活检', slideCount: 2, status: '分析失败', createdAt: '04-24', slides: [
+    { id: 'pub-wsi-006', fileName: '25LG010882_HE_001.svs', stain: 'H&E', format: 'SVS', size: '1.18 GB', status: '分析失败' },
+    { id: 'pub-wsi-007', fileName: '25LG010882_IHC_TTF1_001.sdpc', stain: 'TTF-1', format: 'SDPC', size: '812 MB', status: '分析失败' },
+  ] },
 ]
 
 export type PublicProject = {
