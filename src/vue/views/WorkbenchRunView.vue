@@ -50,6 +50,7 @@ import {
   type AnalysisTaskStatus,
 } from '@/lib/analysisTasks'
 import { useAnalysisTasks } from '../composables/useAnalysisTasks'
+import TaskNameHover from '../components/TaskNameHover.vue'
 
 type WorkspaceMode = 'browse' | 'compare'
 type ResultTab = 'quantitative' | 'features' | 'report'
@@ -525,8 +526,7 @@ async function toggleFullscreen() {
     <aside class="workbench-left">
       <div class="border-b border-white/[0.08] p-3">
         <button class="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-[#8f35b7]/55 bg-[#8f35b7]/10 font-medium text-[#e8b8f8] hover:bg-[#8f35b7]/18" @click="router.push('/workbench/tasks')"><ArrowLeft :size="17" />返回分析任务列表</button>
-        <div class="mt-3 flex items-start justify-between gap-3"><h1 class="min-w-0 truncate text-lg font-semibold" :title="task.taskName">{{ task.taskName }}</h1><span :class="['shrink-0 rounded-md border px-2 py-1 text-xs', statusClass(task.status)]">{{ task.status }}</span></div>
-        <div v-if="['正在分析', '排队中'].includes(task.status)" class="mt-2 flex justify-end border-t border-white/[0.06] pt-3"><button class="rounded-md border border-[#eab65b]/40 bg-[#eab65b]/10 px-2.5 py-1 text-xs text-[#f4c577]" @click="stopAll"><Square :size="11" class="mr-1 inline fill-current" />停止全部</button></div>
+        <div class="mt-3 flex items-start justify-between gap-3"><TaskNameHover :task="task" as="h1" name-class="min-w-0 truncate text-lg font-semibold" /><span :class="['shrink-0 rounded-md border px-2 py-1 text-xs', statusClass(task.status)]">{{ task.status }}</span></div>
       </div>
       <div class="border-b border-white/[0.08] p-3"><label class="flex h-10 items-center gap-2 rounded-md border border-white/[0.08] bg-[#17181d] px-3"><Search :size="16" class="text-[#64748b]" /><input v-model="search" class="w-full bg-transparent text-sm outline-none" placeholder="搜索 WSI / Case / 部位 / 染色" /></label></div>
       <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
@@ -537,7 +537,7 @@ async function toggleFullscreen() {
         </article>
       </div>
       <section v-if="selectedObject" :class="['model-selection', modelSelectionLocked && 'locked']"><div class="flex items-center justify-between"><h3>分析模型</h3><span v-if="modelSelectionLocked" class="text-[10px] text-[#748095]">已锁定</span></div><p>{{ modelSelectionLocked ? '当前任务使用的模型配置。' : '为当前 WSI 选择模型。' }}</p><div class="mt-3 grid gap-2"><button v-for="model in visibleAnalysisModels" :key="model.id" :disabled="modelSelectionLocked || !isModelCompatible(model, selectedObject.stain)" :class="['model-option', selectedObject.modelIds.includes(model.id) && 'active']" @click="toggleModel(model.id)"><span><b>{{ model.name }}</b><small>{{ model.desc }}</small></span><span>{{ !isModelCompatible(model, selectedObject.stain) ? '不适用' : selectedObject.modelIds.includes(model.id) ? '已选' : '可选' }}</span></button></div></section>
-      <div class="border-t border-white/[0.08] p-3"><div class="mb-2 flex justify-between text-xs text-[#748095]"><span>{{ task.objects.filter(item => item.modelIds.length).length }}/{{ task.objects.length }} 张 WSI 已配置模型</span><span>{{ taskProgress }}%</span></div><button v-if="!['正在分析', '排队中'].includes(task.status)" :disabled="!task.models.length" class="btn-primary h-10 w-full disabled:opacity-40" @click="startOrRestart"><Play :size="16" />{{ task.status === '待分析' ? '开始分析' : '重新分析任务' }}</button></div>
+      <div class="border-t border-white/[0.08] p-3"><div class="mb-2 flex justify-between text-xs text-[#748095]"><span>{{ task.objects.filter(item => item.modelIds.length).length }}/{{ task.objects.length }} 张 WSI 已配置模型</span><span>{{ taskProgress }}%</span></div><button v-if="['正在分析', '排队中'].includes(task.status)" class="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-[#eab65b]/40 bg-[#eab65b]/10 font-medium text-[#f4c577]" @click="stopAll"><Square :size="14" class="fill-current" />停止全部</button><button v-else :disabled="!task.models.length" class="btn-primary h-10 w-full disabled:opacity-40" @click="startOrRestart"><Play :size="16" />{{ task.status === '待分析' ? '开始分析' : '重新分析任务' }}</button></div>
     </aside>
 
     <main class="workbench-center">

@@ -205,15 +205,123 @@ function syncObjectStatuses(task: AnalysisTaskRecord, models = task.models, task
   }));
 }
 
-function objectCountText(objectType: AnalysisObjectType, objectCount: number, caseCount?: number, projectCount?: number) {
-  if (objectType === 'Case') {
-    const resolvedCaseCount = caseCount ?? (objectCount > 0 ? 1 : 0);
-    return `${resolvedCaseCount} 个 Case / ${objectCount} 张 WSI`;
+
+function uniqueLabels(values: Array<string | undefined>) {
+  return [...new Set(values.map((item) => item?.trim()).filter((item): item is string => Boolean(item)))];
+}
+
+type TaskDisplayContext = {
+  objectType?: AnalysisObjectType;
+  caseCount?: number;
+  projectCount?: number;
+};
+
+export function buildTaskDisplayName(objects: AnalysisTaskObjectRecord[], context: TaskDisplayContext = {}) {
+  if (!objects.length) return '未命名任务';
+  if (objects.length === 1) return objects[0].name;
+
+  const caseIds = uniqueLabels(objects.map((item) => item.caseId));
+  const projectNames = uniqueLabels(objects.map((item) => item.projectName || item.projectId));
+
+  if (context.objectType === '研究项目') {
+    const projectCount = context.projectCount || projectNames.length;
+    if (projectCount === 1 && projectNames[0]) return projectNames[0];
+    if (projectCount > 1) return projectNames[0] ? `${projectNames[0]} 等 ${projectCount} 个项目` : `${projectCount} 个研究项目`;
+    return '研究项目分析';
   }
-  if (objectType === '研究项目') {
-    const resolvedProjectCount = projectCount ?? (objectCount > 0 ? 1 : 0);
-    return `${resolvedProjectCount} 个项目 / ${caseCount ?? 0} 个 Case / ${objectCount} 张 WSI`;
+
+  if (context.objectType === 'Case') {
+    const caseCount = context.caseCount || caseIds.length;
+    if (caseCount === 1 && caseIds[0]) return caseIds[0];
+    if (caseCount > 1) return caseIds[0] ? `${caseIds[0]} 等 ${caseCount} 个 Case` : `${caseCount} 个 Case`;
+    return 'Case 分析';
   }
+
+  const allFromSameCase = caseIds.length === 1 && objects.every((item) => item.caseId?.trim() === caseIds[0]);
+  if (allFromSameCase) return caseIds[0];
+
+  const allFromSameProject = projectNames.length === 1
+    && objects.every((item) => (item.projectName || item.projectId)?.trim() === projectNames[0]);
+  if (allFromSameProject) return projectNames[0];
+
+  return `${objects[0].name} 等`;
+}
+
+export function getTaskDisplayName(task: Pick<AnalysisTaskRecord, 'objects' | 'objectType' | 'caseCount' | 'projectCount'>) {
+  return buildTaskDisplayName(task.objects || [], task);
+}
+
+export function getTaskDisplaySubtitle(task: Pick<AnalysisTaskRecord, 'objects' | 'objectType' | 'caseCount' | 'projectCount'>) {
+  if (task.objects.length === 1) {
+    return task.objects[0].caseId ? `所属 Case：${task.objects[0].caseId}` : '单张 WSI 分析';
+  }
+  if (task.objectType === '研究项目') return '研究项目分析';
+  if (task.objectType === 'Case') return (task.caseCount || 0) > 1 ? '批量 Case 分析' : 'Case 分析';
+
+  const caseIds = uniqueLabels(task.objects.map((item) => item.caseId));
+  const allFromSameCase = caseIds.length === 1 && task.objects.every((item) => item.caseId?.trim() === caseIds[0]);
+  return allFromSameCase ? '同一 Case 下的切片' : '批量 WSI 分析';
+}
+
+export type TaskObjectSummary = {
+  primary: string;
+  secondary?: string;
+};
+
+export function getTaskObjectSummary(task: Pick<AnalysisTaskRecord, 'objects' | 'objectType' | 'caseCount' | 'projectCount'>): TaskObjectSummary {
+  const wsiCount = task.objects.length;
+  const caseCount = task.caseCount ?? uniqueLabels(task.objects.map((item) => item.caseId)).length;
+  const projectCount = task.projectCount ?? uniqueLabels(task.objects.map((item) => item.projectId)).length;
+
+  if (task.objectType === '研究项目') {
+    const parents = [projectCount ? `${projectCount} 个项目` : '', caseCount ? `${caseCount} 个 Case` : ''].filter(Boolean);
+    return { primary: `${wsiCount} 张 WSI`, secondary: parents.length ? `来自 ${parents.join(' · ')}` : undefined };
+  }
+  if (task.objectType === 'Case') {
+    return { primary: `${wsiCount} 张 WSI`, secondary: caseCount ? `来自 ${caseCount} 个 Case` : undefined };
+  }
+  return { primary: `${wsiCount} 张 WSI` };
+}
+
+export type TaskCaseSlideGroup = {
+  caseLabel: string;
+  slideCount: number;
+  slides: string[];
+};
+
+export type TaskNameDetails = {
+  slideCount: number;
+  caseCount: number;
+  unboundSlideCount: number;
+  caseGroups: TaskCaseSlideGroup[];
+  projects: string[];
+};
+
+export function getTaskNameDetails(task: Pick<AnalysisTaskRecord, 'objects'>): TaskNameDetails | null {
+  const objects = task.objects || [];
+  if (objects.length <= 1) return null;
+
+  const groups = new Map<string, { slideCount: number; slides: string[] }>();
+  objects.forEach((object) => {
+    const caseLabel = object.caseId?.trim() || object.caseName?.trim() || '未绑定 Case';
+    const group = groups.get(caseLabel) || { slideCount: 0, slides: [] };
+    group.slideCount += 1;
+    if (object.name && !group.slides.includes(object.name)) group.slides.push(object.name);
+    groups.set(caseLabel, group);
+  });
+
+  const caseGroups = [...groups.entries()].map(([caseLabel, group]) => ({ caseLabel, ...group }));
+  const unboundSlideCount = groups.get('未绑定 Case')?.slideCount || 0;
+  return {
+    slideCount: objects.length,
+    caseCount: caseGroups.filter((group) => group.caseLabel !== '未绑定 Case').length,
+    unboundSlideCount,
+    caseGroups,
+    projects: uniqueLabels(objects.map((item) => item.projectName || item.projectId)),
+  };
+}
+
+function objectCountText(objectCount: number) {
   return `${objectCount} 张 WSI`;
 }
 
@@ -301,9 +409,7 @@ function normalizeTask(raw: unknown): AnalysisTaskRecord | null {
     sourceType,
     sourceLabel: task.sourceLabel || (sourceType === 'case' ? 'Case 管理' : sourceType === 'project' ? '研究项目管理' : sourceType === 'model_center' ? '模型中心' : 'WSI 管理'),
     objectType: resolvedObjectType,
-    objectCount: resolvedObjectType === '研究项目'
-      ? objectCountText(resolvedObjectType, objects.length, resolvedCaseCount, resolvedProjectCount || undefined)
-      : task.objectCount || objectCountText(resolvedObjectType, objects.length, resolvedCaseCount),
+    objectCount: objectCountText(objects.length),
     status,
     createdAt: task.createdAt || nowText(),
     modelLocked: Boolean(task.modelLocked),
@@ -870,7 +976,7 @@ function objectsFromProjects(items: ProjectSelectionItem[], modelIds: string[] =
 }
 
 function buildTask(args: {
-  taskName: string;
+  taskName?: string;
   sourceType: AnalysisTaskSourceType;
   sourceLabel: AnalysisTaskSourceLabel;
   objectType: AnalysisObjectType;
@@ -881,11 +987,11 @@ function buildTask(args: {
 }) {
   const task: AnalysisTaskRecord = {
     id: newId('task'),
-    taskName: args.taskName,
+    taskName: args.taskName || buildTaskDisplayName(args.objects, args),
     sourceType: args.sourceType,
     sourceLabel: args.sourceLabel,
     objectType: args.objectType,
-    objectCount: objectCountText(args.objectType, args.objects.length, args.caseCount, args.projectCount),
+    objectCount: objectCountText(args.objects.length),
     status: '待分析',
     createdAt: nowText(),
     modelLocked: args.modelLocked,
@@ -930,7 +1036,7 @@ export function createTaskFromSelection(args: {
   }
 
   const task = buildTask({
-    taskName: args.taskName || `${selectedModel.name} - ${objectType} 分析任务`,
+    taskName: args.taskName,
     sourceType,
     sourceLabel,
     objectType,
@@ -967,7 +1073,6 @@ export function createTaskFromWsis(args: {
   }));
 
   return buildTask({
-    taskName: objects.length === 1 ? `${objects[0].name} 单切片分析` : `${objects.length} 张 WSI 批量分析`,
     sourceType: 'wsi',
     sourceLabel: 'WSI 管理',
     objectType: 'WSI',
@@ -1035,7 +1140,6 @@ export function createTaskFromCases(args: {
   const activeCases = caseObjects.map((item) => item.caseItem);
 
   return buildTask({
-    taskName: activeCases.length === 1 ? `${activeCases[0].caseId} 病例分析` : `${activeCases.length} 个 Case 批量分析`,
     sourceType: 'case',
     sourceLabel: 'Case 管理',
     objectType: 'Case',
@@ -1094,7 +1198,6 @@ export function createTaskFromProject(args: {
     }));
 
   return buildTask({
-    taskName: `${args.projectName} 项目分析`,
     sourceType: 'project',
     sourceLabel: '研究项目管理',
     objectType: '研究项目',
@@ -1286,12 +1389,7 @@ export function deletePendingObject(taskId: string, objectId: string) {
       models,
       caseCount,
       projectCount: task.objectType === '研究项目' ? projectCount : task.projectCount,
-      objectCount: objectCountText(
-        task.objectType,
-        objects.length,
-        caseCount,
-        task.objectType === '研究项目' ? projectCount : task.projectCount,
-      ),
+      objectCount: objectCountText(objects.length),
     };
     return { ...next, objects: syncObjectStatuses(next, models, status) };
   });

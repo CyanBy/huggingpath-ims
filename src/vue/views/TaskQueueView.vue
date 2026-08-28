@@ -4,12 +4,16 @@ import { useRouter } from 'vue-router'
 import { ClipboardList, Search } from '@lucide/vue'
 import {
   deleteAnalysisTask,
+  getTaskDisplayName,
+  getTaskDisplaySubtitle,
+  getTaskObjectSummary,
   getUniqueTaskModels,
   type AnalysisObjectType,
   type AnalysisTaskRecord,
   type AnalysisTaskStatus,
 } from '@/lib/analysisTasks'
 import { useAnalysisTasks } from '../composables/useAnalysisTasks'
+import TaskNameHover from '../components/TaskNameHover.vue'
 
 const router = useRouter()
 const { tasks, refresh } = useAnalysisTasks(true)
@@ -25,7 +29,7 @@ const summary = computed(() => statuses.reduce<Record<string, number>>((result, 
 const filteredTasks = computed(() => {
   const query = keyword.value.trim().toLowerCase()
   return tasks.value.filter((task) => {
-    const text = `${task.taskName} ${task.sourceLabel} ${task.objectType} ${task.objectCount} ${getUniqueTaskModels(task).map((model) => model.name).join(' ')}`.toLowerCase()
+    const text = `${getTaskDisplayName(task)} ${task.objects.map((item) => item.name).join(' ')} ${task.sourceLabel} ${task.objectType} ${task.objectCount} ${getUniqueTaskModels(task).map((model) => model.name).join(' ')}`.toLowerCase()
     return (!query || text.includes(query))
       && (statusFilter.value === '全部状态' || task.status === statusFilter.value)
       && (objectFilter.value === '全部对象' || task.objectType === objectFilter.value)
@@ -53,6 +57,10 @@ function statusClass(status: AnalysisTaskStatus) {
     '失败': 'border-[#ff9c9c]/45 bg-[#ff9c9c]/10 text-[#ffb4b4]',
     '已停止': 'border-[#64748b]/45 bg-[#64748b]/10 text-[#cbd5e1]',
   }[status]
+}
+
+function openWorkbench(task: AnalysisTaskRecord) {
+  router.push(`/workbench/run/${task.id}`)
 }
 
 function removeTask(id: string) {
@@ -89,8 +97,8 @@ function removeTask(id: string) {
       <div v-if="!filteredTasks.length" class="flex min-h-[260px] flex-col items-center justify-center px-6 text-center"><span class="mb-4 grid h-12 w-12 place-items-center rounded-lg bg-[#8f35b7]/15 text-[#d292f4]"><ClipboardList :size="24" /></span><h3 class="text-lg font-semibold">暂无分析任务</h3><p class="mt-2 max-w-[520px] text-sm">请从模型中心运行模型，或从 WSI、Case、研究项目管理发起分析。</p></div>
       <div v-else class="overflow-x-auto">
         <table class="w-full min-w-[1050px] table-fixed text-sm">
-          <thead class="bg-[#252730] text-[#cbd5e1]"><tr><th class="w-[23%]">任务名称</th><th>来源</th><th>对象类型</th><th>分析对象数</th><th class="w-[17%]">AI 模型</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
-          <tbody><tr v-for="task in filteredTasks" :key="task.id" class="border-b border-white/[0.06] hover:bg-white/[0.025]"><td><b>{{ task.taskName }}</b><small class="mt-1 block text-[#64748b]">{{ task.modelLocked ? '模型已固定' : '对象来源任务' }}</small></td><td>{{ task.sourceLabel }}</td><td>{{ task.objectType }}</td><td>{{ task.objectCount }}</td><td><span v-for="model in getUniqueTaskModels(task)" :key="model.id" class="mr-1 inline-flex rounded border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-1 text-xs text-[#d292f4]">{{ model.name }}</span></td><td><span :class="['inline-flex rounded-md border px-2 py-1 text-xs', statusClass(task.status)]">{{ statusText(task) }}</span></td><td class="text-xs text-[#94a3b8]">{{ task.createdAt }}</td><td><div class="flex gap-3"><button class="text-xs text-[#d292f4]" @click="router.push(`/workbench/run/${task.id}`)">{{ task.status === '分析完成' ? '查看结果' : '打开工作台' }}</button><button class="text-xs text-[#ff9c9c]" @click="removeTask(task.id)">删除</button></div></td></tr></tbody>
+          <thead class="bg-[#252730] text-[#cbd5e1]"><tr><th class="w-[23%]">任务名称</th><th>来源</th><th>对象类型</th><th>分析规模</th><th class="w-[17%]">AI 模型</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+          <tbody><tr v-for="task in filteredTasks" :key="task.id" class="cursor-pointer border-b border-white/[0.06] hover:bg-white/[0.025]" @dblclick="openWorkbench(task)"><td><TaskNameHover :task="task" name-class="block truncate" /><small class="mt-1 block truncate text-[#64748b]">{{ getTaskDisplaySubtitle(task) }}</small></td><td>{{ task.sourceLabel }}</td><td>{{ task.objectType }}</td><td><b class="block font-medium text-[#e2e8f0]">{{ getTaskObjectSummary(task).primary }}</b><small v-if="getTaskObjectSummary(task).secondary" class="mt-1 block text-[#64748b]">{{ getTaskObjectSummary(task).secondary }}</small></td><td><span v-for="model in getUniqueTaskModels(task)" :key="model.id" class="mr-1 inline-flex rounded border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-1 text-xs text-[#d292f4]">{{ model.name }}</span></td><td><span :class="['inline-flex rounded-md border px-2 py-1 text-xs', statusClass(task.status)]">{{ statusText(task) }}</span></td><td class="text-xs text-[#94a3b8]">{{ task.createdAt }}</td><td @dblclick.stop><div class="flex gap-3"><button class="text-xs text-[#d292f4]" @click="router.push(`/workbench/run/${task.id}`)">{{ task.status === '分析完成' ? '查看结果' : '打开工作台' }}</button><button class="text-xs text-[#ff9c9c]" @click="removeTask(task.id)">删除</button></div></td></tr></tbody>
         </table>
       </div>
     </section>

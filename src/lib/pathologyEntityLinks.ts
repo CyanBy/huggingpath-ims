@@ -49,34 +49,24 @@ const PROJECTS: Record<string, ResearchProjectLink> = {
 };
 
 const CASE_PROJECT_RELATIONSHIPS: Record<string, string[]> = {
-  'S-20260517-1906': ['PRJ-2026-003', 'PRJ-2026-002', 'PRJ-2026-004'],
+  'S-20260517-1906': ['PRJ-2026-003'],
   'S-20260209-6099': [],
   'S-20260114-3036': ['PRJ-2026-002'],
-  'S-20260402-9407': ['PRJ-2026-001', 'PRJ-2026-004'],
-  'S-20251122-5123': ['PRJ-2026-004', 'PRJ-2026-002', 'PRJ-2026-003', 'PRJ-2026-001'],
-  'S-20260427-6800': ['PRJ-2026-002'],
-  'S-20251129-0750': [],
-  'S-20260515-4367': ['PRJ-2026-004', 'PRJ-2026-002'],
-  'S-20260129-6047': ['PRJ-2026-004', 'PRJ-2026-002', 'PRJ-2026-001'],
-  'S-20260504-9169': ['PRJ-2026-002'],
+  'S-20260402-9407': ['PRJ-2026-001'],
+  'S-20251122-5123': ['PRJ-2026-004'],
 };
 
 const WSI_RELATIONSHIPS: Record<
   string,
   { caseId?: string; directProjectIds?: string[] }
 > = {
-  'wsi-001': {
-    caseId: 'S-20260517-1906',
-  },
-  'wsi-002': {
-    caseId: 'S-20260517-1906',
-  },
-  'wsi-003': {
-    directProjectIds: ['PRJ-2026-001'],
-  },
-  'wsi-004': {
-    caseId: 'S-20260209-6099',
-  },
+  'wsi-001': { caseId: 'S-20260517-1906' },
+  'wsi-002': { caseId: 'S-20260517-1906' },
+  'wsi-003': { directProjectIds: ['PRJ-2026-001'] },
+  'wsi-004': { caseId: 'S-20260209-6099' },
+  'wsi-005': { caseId: 'S-20251122-5123' },
+  'wsi-006': { caseId: 'S-20260114-3036' },
+  'wsi-007': { caseId: 'S-20260402-9407' },
 };
 
 const EMPTY_STATE: PathologyEntityDeletionState = {

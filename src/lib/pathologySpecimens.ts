@@ -25,9 +25,9 @@ export const SAMPLING_METHOD_OPTIONS = [
 const CASE_SPECIMEN_PROFILES: Record<string, PathologySpecimenProfile> = {
   'S-20260517-1906': { site: 'lung', samplingMethod: 'biopsy' },
   'S-20260209-6099': { site: 'kidney', samplingMethod: 'surgical' },
-  'S-20260114-3036': { site: 'thyroid', samplingMethod: 'surgical' },
-  'S-20260402-9407': { site: 'thyroid', samplingMethod: 'biopsy' },
-  'S-20251122-5123': { site: 'thyroid', samplingMethod: 'surgical' },
+  'S-20260114-3036': { site: 'colon', samplingMethod: 'surgical' },
+  'S-20260402-9407': { site: 'breast', samplingMethod: 'biopsy' },
+  'S-20251122-5123': { site: 'stomach', samplingMethod: 'biopsy' },
   'S-20260427-6800': { site: 'liver', samplingMethod: 'surgical' },
   'S-20251129-0750': { site: 'kidney', samplingMethod: 'surgical' },
   'S-20260515-4367': { site: 'thyroid', samplingMethod: 'biopsy' },

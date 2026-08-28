@@ -64,13 +64,57 @@ function createCase() {
 <template>
   <div class="min-h-[calc(100dvh-64px)] px-4 py-5 lg:px-6">
     <div v-if="route.query.from === 'wsi'" class="mb-4 flex items-center justify-between rounded-md border border-[#8f35b7]/30 bg-[#8f35b7]/10 px-4 py-3 text-sm"><span>已定位到 WSI 绑定的 Case，返回后原 WSI 选择仍会保留。</span><button class="text-[#d292f4]" @click="router.push('/workbench/wsi')">返回 WSI 管理</button></div>
-    <header class="mb-5 flex flex-wrap items-start justify-between gap-4"><div><h1 class="text-2xl font-bold">Case 管理</h1><p class="mt-1 text-sm">管理病例信息、关联 WSI 和研究项目。</p></div><button class="btn-primary" @click="createOpen=true"><Plus :size="16" />新增 Case</button></header>
-    <section class="overflow-hidden rounded-lg border border-white/[0.08] bg-[#202126]"><header class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] p-4"><div><h2 class="font-semibold">Case 列表</h2><p class="mt-1 text-xs">点击行空白区域即可多选，展开后查看关联 WSI。</p></div><div class="flex flex-wrap gap-2"><label class="flex h-9 items-center gap-2 rounded-md border border-white/[0.08] bg-[#17181d] px-3"><Search :size="15" class="text-[#64748b]" /><input v-model="keyword" class="w-[250px] bg-transparent text-sm outline-none" placeholder="搜索 Case / 部位 / 项目" /></label><select v-model="projectFilter" class="input-field h-9"><option>全部项目</option><option v-for="item in projects" :key="item.id">{{ item.name }}</option></select><button :disabled="!selected.length" class="btn-primary h-9 disabled:opacity-40" @click="startAnalysis">分析已选 Case（{{ selected.length }}）</button></div></header><div class="overflow-x-auto"><table class="w-full min-w-[1080px] text-sm"><thead class="bg-[#252730]"><tr><th class="w-12"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th><th>Case 编号</th><th>取材部位</th><th>取材方式</th><th>年龄段 / 性别</th><th>WSI 数</th><th>研究项目</th><th>分析次数</th><th>状态</th><th>操作</th></tr></thead><tbody v-for="item in filtered" :key="item.id"><tr :class="['border-t border-white/[0.06] hover:bg-white/[0.025]',selectedIds.includes(item.id)&&'bg-[#8f35b7]/10']" @click="rowClick($event,item.id)"><td><input type="checkbox" :checked="selectedIds.includes(item.id)" @change="toggle(item.id)" /></td><td><div class="flex items-center gap-2"><button class="text-[#94a3b8]" @click="expanded=expanded.includes(item.id)?expanded.filter(id=>id!==item.id):[...expanded,item.id]"><ChevronDown v-if="expanded.includes(item.id)" :size="16" /><ChevronRight v-else :size="16" /></button><button class="font-mono text-[#d292f4]" @click="router.push(`/cases/${item.id}`)">{{ item.id }}</button></div><small class="ml-6 mt-1 block text-[#64748b]">{{ item.remark }}</small></td><td>{{ getPathologySiteLabel(item.site) }}</td><td>{{ getSamplingMethodLabel(item.samplingMethod) }}</td><td>{{ item.ageGroup }} / {{ item.sex }}</td><td>{{ caseWsis(item.id).length }}</td><td><span v-if="!getCaseResearchProjects(item.id).length" class="text-[#64748b]">未加入</span><span v-for="project in getCaseResearchProjects(item.id).slice(0,2)" :key="project.id" class="mr-1 rounded bg-[#8f35b7]/15 px-2 py-1 text-xs text-[#d292f4]">{{ project.name }}</span></td><td>{{ countCaseAnalysisTasks(item.id,tasks) }} 次</td><td><span class="rounded-md border border-white/[0.08] px-2 py-1 text-xs">{{ item.status }}</span></td><td><button class="text-[#d292f4]" @click="router.push(`/cases/${item.id}`)">查看</button></td></tr><tr v-if="expanded.includes(item.id)" class="bg-[#17181d]"><td colspan="10" class="p-0"><div v-if="!caseWsis(item.id).length" class="px-16 py-5 text-sm text-[#64748b]">当前 Case 暂无关联 WSI。</div><div v-else class="grid gap-2 px-16 py-4"><button v-for="wsi in caseWsis(item.id)" :key="wsi.id" class="flex items-center justify-between rounded-md border border-white/[0.06] bg-[#202126] px-3 py-2 text-left" @click="router.push(`/workbench/wsi?preview=${wsi.id}`)"><span class="flex items-center gap-2"><img src="/wsi-demo.jpg" alt="WSI" class="h-8 w-12 rounded object-cover" /><span><b class="block font-mono text-xs">{{ wsi.fileName }}</b><small class="text-[#64748b]">{{ wsi.stain }} · {{ wsi.size }}</small></span></span><span class="text-xs text-[#d292f4]">查看 WSI</span></button></div></td></tr></tbody></table></div></section>
+    <header class="mb-5 flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-bold">Case 管理</h1>
+        <p class="mt-1 text-sm">管理病例信息、关联 WSI 和研究项目。</p>
+      </div>
+      <button class="btn-primary h-10 shrink-0" @click="createOpen=true"><Plus :size="16" />新增 Case</button>
+    </header>
+
+    <section class="overflow-hidden rounded-lg border border-white/[0.08] bg-[#202126]">
+      <div class="flex flex-wrap items-center gap-2 border-b border-white/[0.06] px-4 py-3">
+        <label class="flex h-9 min-w-[200px] flex-1 items-center gap-2 rounded-md border border-white/[0.08] bg-[#17181d] px-3">
+          <Search :size="15" class="shrink-0 text-[#64748b]" />
+          <input v-model="keyword" class="w-full min-w-0 bg-transparent text-sm outline-none" placeholder="搜索 Case / 部位 / 项目" />
+        </label>
+        <select v-model="projectFilter" class="filter" :title="projectFilter">
+          <option>全部项目</option>
+          <option v-for="item in projects" :key="item.id">{{ item.name }}</option>
+        </select>
+      </div>
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-3">
+        <div>
+          <h2 class="font-semibold">Case 列表</h2>
+          <p class="mt-0.5 text-xs text-[#94a3b8]">点击行空白处可多选，展开后查看关联 WSI。</p>
+        </div>
+        <button :disabled="!selected.length" class="btn-primary h-9 shrink-0 disabled:cursor-not-allowed disabled:opacity-40" @click="startAnalysis">分析已选 Case（{{ selected.length }}）</button>
+      </div>
+      <div class="overflow-x-auto"><table class="w-full min-w-[1080px] text-sm"><thead class="bg-[#252730]"><tr><th class="w-12"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th><th>Case 编号</th><th>取材部位</th><th>取材方式</th><th>年龄段 / 性别</th><th>WSI 数</th><th>研究项目</th><th>分析次数</th><th>状态</th><th>操作</th></tr></thead><tbody v-for="item in filtered" :key="item.id"><tr :class="['border-t border-white/[0.06] hover:bg-white/[0.025]',selectedIds.includes(item.id)&&'bg-[#8f35b7]/10']" @click="rowClick($event,item.id)"><td><input type="checkbox" :checked="selectedIds.includes(item.id)" @change="toggle(item.id)" /></td><td><div class="flex items-center gap-2"><button class="text-[#94a3b8]" @click="expanded=expanded.includes(item.id)?expanded.filter(id=>id!==item.id):[...expanded,item.id]"><ChevronDown v-if="expanded.includes(item.id)" :size="16" /><ChevronRight v-else :size="16" /></button><button class="font-mono text-[#d292f4]" @click="router.push(`/cases/${item.id}`)">{{ item.id }}</button></div><small class="ml-6 mt-1 block text-[#64748b]">{{ item.remark }}</small></td><td>{{ getPathologySiteLabel(item.site) }}</td><td>{{ getSamplingMethodLabel(item.samplingMethod) }}</td><td>{{ item.ageGroup }} / {{ item.sex }}</td><td>{{ caseWsis(item.id).length }}</td><td><span v-if="!getCaseResearchProjects(item.id).length" class="text-[#64748b]">未加入</span><span v-for="project in getCaseResearchProjects(item.id)" :key="project.id" class="mr-1 rounded bg-[#8f35b7]/15 px-2 py-1 text-xs text-[#d292f4]">{{ project.name }}</span></td><td>{{ countCaseAnalysisTasks(item.id,tasks) }} 次</td><td><span class="rounded-md border border-white/[0.08] px-2 py-1 text-xs">{{ item.status }}</span></td><td><button class="text-[#d292f4]" @click="router.push(`/cases/${item.id}`)">查看</button></td></tr><tr v-if="expanded.includes(item.id)" class="bg-[#17181d]"><td colspan="10" class="p-0"><div v-if="!caseWsis(item.id).length" class="px-16 py-5 text-sm text-[#64748b]">当前 Case 暂无关联 WSI。</div><div v-else class="grid gap-2 px-16 py-4"><button v-for="wsi in caseWsis(item.id)" :key="wsi.id" class="flex items-center justify-between rounded-md border border-white/[0.06] bg-[#202126] px-3 py-2 text-left" @click="router.push(`/workbench/wsi?preview=${wsi.id}`)"><span class="flex items-center gap-2"><img src="/wsi-demo.jpg" alt="WSI" class="h-8 w-12 rounded object-cover" /><span><b class="block font-mono text-xs">{{ wsi.fileName }}</b><small class="text-[#64748b]">{{ wsi.stain }} · {{ wsi.size }}</small></span></span><span class="text-xs text-[#d292f4]">查看 WSI</span></button></div></td></tr></tbody></table></div>
+    </section>
 
     <Teleport to="body"><div v-if="createOpen" class="fixed inset-0 z-[130] grid place-items-center bg-black/75 px-4" @click.self="createOpen=false"><form class="w-full max-w-[620px] rounded-lg border border-white/[0.10] bg-[#202126]" @submit.prevent="createCase"><header class="flex items-center justify-between border-b border-white/[0.08] p-5"><div><h2 class="text-lg font-semibold">新增 Case</h2><p class="mt-1 text-xs">创建后可继续关联已有或新上传的 WSI。</p></div><button type="button" class="text-[#94a3b8]" @click="createOpen=false"><X :size="19" /></button></header><div class="grid gap-4 p-5 sm:grid-cols-2"><label class="field sm:col-span-2">Case 编号 *<input v-model="newCase.id" placeholder="例如 S-20260820-0001" /></label><label class="field">取材部位<select v-model="newCase.site"><option v-for="item in PATHOLOGY_SITE_OPTIONS" :key="item.value" :value="item.value">{{ item.label }}</option></select></label><label class="field">取材方式<select v-model="newCase.samplingMethod"><option v-for="item in SAMPLING_METHOD_OPTIONS" :key="item.value" :value="item.value">{{ item.label }}</option></select></label><label class="field">年龄段<select v-model="newCase.ageGroup"><option>0-18</option><option>19-40</option><option>41-60</option><option>61+</option></select></label><label class="field">性别<select v-model="newCase.sex"><option>未知</option><option>男</option><option>女</option></select></label><label class="field sm:col-span-2">备注<textarea v-model="newCase.remark" placeholder="可选" /></label><p v-if="error" class="sm:col-span-2 text-sm text-[#ff9c9c]">{{ error }}</p></div><footer class="flex justify-end gap-2 border-t border-white/[0.08] p-4"><button type="button" class="btn-secondary" @click="createOpen=false">取消</button><button class="btn-primary" type="submit">创建 Case</button></footer></form></div></Teleport>
   </div>
 </template>
 
 <style scoped>
-th,td{padding:11px 12px;text-align:left}th{color:#cbd5e1;font-weight:600}.field{display:grid;gap:7px;color:#cbd5e1;font-size:13px}.field input,.field select,.field textarea{border:1px solid rgb(255 255 255 / .08);border-radius:6px;background:#17181d;padding:9px 10px;color:#e2e8f0;outline:none}.field textarea{min-height:74px;resize:vertical}
+th,td{padding:11px 12px;text-align:left}th{color:#cbd5e1;font-weight:600}
+.field{display:grid;gap:7px;color:#cbd5e1;font-size:13px}
+.field input,.field select,.field textarea{border:1px solid rgb(255 255 255 / .08);border-radius:6px;background:#17181d;padding:9px 10px;color:#e2e8f0;outline:none}
+.field textarea{min-height:74px;resize:vertical}
+.filter {
+  height: 36px;
+  min-width: 148px;
+  max-width: 220px;
+  border: 1px solid rgb(255 255 255 / .08);
+  border-radius: 6px;
+  color: #cbd5e1;
+  outline: none;
+  appearance: none;
+  padding: 0 28px 0 12px;
+  background-color: #17181d;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
 </style>

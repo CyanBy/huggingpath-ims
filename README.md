@@ -1,73 +1,20 @@
-# React + TypeScript + Vite
+# HuggingPath
+HuggingPath 是病理影像 + AI 分析前端原型。
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Vue 3 + TypeScript + Vite + Tailwind，hash 路由，开发端口 3000。无后端、无真实推理或瓦片服务，数据存在 localStorage / sessionStorage。
 
-Currently, two official plugins are available:
+开发时用 Vite，端口 3000。
+演示账号 demo / demo123
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 更新说明
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### 2026-08-28
+- 分析任务列表重新区分“任务名称”和“分析规模”：名称只说明分析范围，规模只说明实际 WSI 数量及其上级 Case / 项目数量，避免两列重复展示“几张 WSI”。
+- 单张 WSI 使用文件名；同一 Case 的多张 WSI 使用 Case 编号；批量 Case 使用“首个 Case 等 N 个 Case”；研究项目使用项目名称；混合 WSI 使用“首张文件名等”。
+- 分析规模统一以“X 张 WSI”为主信息，Case 和研究项目任务在下一行补充“来自 N 个 Case / 项目”。多于 1 张切片时，悬停仍可查看完整切片、Case 和项目明细。
+- 多对象任务的展开详情改成“分析范围 → Case → 切片”的层级结构：每个 Case 单独显示切片数量和文件，未绑定切片独立归组，研究项目任务额外标明所属项目；提示层支持滚动、键盘聚焦和视口上下避让。
+- 任务列表支持双击进入工作台，同时保留打开工作台和查看结果按钮。操作列加了双击拦截，避免点删除时误跳。
+- Case 管理：项目筛选改成深色样式。页头只放新增 Case；搜索和项目筛选单独一行；分析已选 Case 常驻在列表标题右侧，未勾选时禁用。
+- 模拟数据收成 5 个 Case，每条绑定自己的 WSI，不再串绑。Case 详情改为读取工作区切片。工作区存储键升到 v2，刷新后使用新种子。
+- 第 3 条 Case 从甲状腺改为结直肠，与结直肠研究项目对齐。
+- 工作台侧栏停止全部从标题下方挪到底部主按钮，与开始分析对换；卡片上的单条停止仍保留。
