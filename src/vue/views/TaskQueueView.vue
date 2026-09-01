@@ -88,7 +88,7 @@ function removeTask(id: string) {
       <header class="flex flex-wrap items-center justify-between gap-3 border-b border-white/[0.06] px-4 py-3">
         <div><h2 class="font-semibold">任务列表</h2><p class="mt-0.5 text-xs">只展示仍包含分析对象的任务。</p></div>
         <div class="flex flex-1 flex-wrap justify-end gap-2">
-          <label class="flex h-9 min-w-[240px] max-w-[320px] flex-1 items-center gap-2 rounded-md border border-white/[0.08] bg-[#17181d] px-3"><Search :size="15" class="text-[#64748b]" /><input v-model="keyword" class="w-full bg-transparent text-sm outline-none" placeholder="搜索任务名称 / 来源 / 模型" /></label>
+          <label class="flex h-9 min-w-[240px] max-w-[320px] flex-1 items-center gap-2 rounded-md border border-white/[0.08] bg-[#17181d] px-3"><Search :size="15" class="text-[#64748b]" /><input v-model="keyword" class="w-full bg-transparent text-sm outline-none" placeholder="搜索任务编号 / WSI / 来源 / 模型" /></label>
           <select v-model="statusFilter" class="filter"><option>全部状态</option><option v-for="status in statuses" :key="status">{{ status }}</option></select>
           <select v-model="objectFilter" class="filter"><option>全部对象</option><option>WSI</option><option>Case</option><option>研究项目</option></select>
         </div>
@@ -97,7 +97,7 @@ function removeTask(id: string) {
       <div v-if="!filteredTasks.length" class="flex min-h-[260px] flex-col items-center justify-center px-6 text-center"><span class="mb-4 grid h-12 w-12 place-items-center rounded-lg bg-[#8f35b7]/15 text-[#d292f4]"><ClipboardList :size="24" /></span><h3 class="text-lg font-semibold">暂无分析任务</h3><p class="mt-2 max-w-[520px] text-sm">请从模型中心运行模型，或从 WSI、Case、研究项目管理发起分析。</p></div>
       <div v-else class="overflow-x-auto">
         <table class="w-full min-w-[1050px] table-fixed text-sm">
-          <thead class="bg-[#252730] text-[#cbd5e1]"><tr><th class="w-[23%]">任务名称</th><th>来源</th><th>对象类型</th><th>分析规模</th><th class="w-[17%]">AI 模型</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
+          <thead class="bg-[#252730] text-[#cbd5e1]"><tr><th class="w-[23%]">任务编号</th><th>来源</th><th>对象类型</th><th>分析规模</th><th class="w-[17%]">AI 模型</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
           <tbody><tr v-for="task in filteredTasks" :key="task.id" class="cursor-pointer border-b border-white/[0.06] hover:bg-white/[0.025]" @dblclick="openWorkbench(task)"><td><TaskNameHover :task="task" name-class="block truncate" /><small class="mt-1 block truncate text-[#64748b]">{{ getTaskDisplaySubtitle(task) }}</small></td><td>{{ task.sourceLabel }}</td><td>{{ task.objectType }}</td><td><b class="block font-medium text-[#e2e8f0]">{{ getTaskObjectSummary(task).primary }}</b><small v-if="getTaskObjectSummary(task).secondary" class="mt-1 block text-[#64748b]">{{ getTaskObjectSummary(task).secondary }}</small></td><td><span v-for="model in getUniqueTaskModels(task)" :key="model.id" class="mr-1 inline-flex rounded border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-1 text-xs text-[#d292f4]">{{ model.name }}</span></td><td><span :class="['inline-flex rounded-md border px-2 py-1 text-xs', statusClass(task.status)]">{{ statusText(task) }}</span></td><td class="text-xs text-[#94a3b8]">{{ task.createdAt }}</td><td @dblclick.stop><div class="flex gap-3"><button class="text-xs text-[#d292f4]" @click="router.push(`/workbench/run/${task.id}`)">{{ task.status === '分析完成' ? '查看结果' : '打开工作台' }}</button><button class="text-xs text-[#ff9c9c]" @click="removeTask(task.id)">删除</button></div></td></tr></tbody>
         </table>
       </div>

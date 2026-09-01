@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowLeft,
@@ -38,6 +38,7 @@ import {
   deletePendingObject,
   getModelDefinition,
   getObjectRuns,
+  getTaskDisplayName,
   isModelCompatible,
   reanalyzeAnalysisObject,
   reanalyzeTask,
@@ -50,7 +51,6 @@ import {
   type AnalysisTaskStatus,
 } from '@/lib/analysisTasks'
 import { useAnalysisTasks } from '../composables/useAnalysisTasks'
-import TaskNameHover from '../components/TaskNameHover.vue'
 
 type WorkspaceMode = 'browse' | 'compare'
 type ResultTab = 'quantitative' | 'features' | 'report'
@@ -118,6 +118,8 @@ const featureSearch = ref('')
 const selectedFeatureId = ref('fibroblast-spindle-index-std')
 const activeResultModelId = ref('')
 const generatedReportModelIds = ref<string[]>([])
+const fileNameTip = ref<{ text: string; x: number; y: number } | null>(null)
+const fileNameTipElement = ref<HTMLElement | null>(null)
 
 const zoomLevels = [0.5, 1, 4, 10, 20, 40, 80]
 const slidePixelSize = { width: 22200, height: 29670 }
@@ -262,13 +264,68 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onViewerKeydown))
 function runProgress(run: AnalysisModelRunRecord) {
   return run.status === '分析完成' ? 100 : Math.max(0, Math.min(100, run.progress ?? 0))
 }
+function objectRuns(item: AnalysisTaskObjectRecord) {
+  return task.value ? getObjectRuns(task.value, item.id) : []
+}
+function fileNameParts(name: string) {
+  const tailLength = 12
+  return name.length > tailLength * 2
+    ? { head: name.slice(0, -tailLength), tail: name.slice(-tailLength) }
+    : { head: name, tail: '' }
+}
+async function positionFileNameTip(target: HTMLElement, text: string) {
+  const rect = target.getBoundingClientRect()
+  fileNameTip.value = { text, x: rect.left, y: rect.bottom + 7 }
+  await nextTick()
+  if (!fileNameTip.value) return
+
+  const tipRect = fileNameTipElement.value?.getBoundingClientRect()
+  const width = tipRect?.width || 0
+  const height = tipRect?.height || 0
+  fileNameTip.value = {
+    text,
+    x: Math.max(12, Math.min(rect.left, window.innerWidth - width - 12)),
+    y: rect.bottom + height + 7 <= window.innerHeight - 12
+      ? rect.bottom + 7
+      : Math.max(12, rect.top - height - 7),
+  }
+}
+async function showFileName(event: MouseEvent | FocusEvent, name: string) {
+  const target = event.currentTarget as HTMLElement
+  const head = target.querySelector('span')
+  if (head && head.scrollWidth <= head.clientWidth) return
+  await positionFileNameTip(target, name)
+}
+function hideFileName() {
+  fileNameTip.value = null
+}
+function fileNameWithoutExtension(name: string) {
+  return name.replace(/\.[^.]+$/, '')
+}
+async function copyFileName(event: MouseEvent, name: string) {
+  const target = event.currentTarget as HTMLElement
+  const text = fileNameWithoutExtension(name)
+  try {
+    await navigator.clipboard.writeText(text)
+  } catch {
+    const textarea = document.createElement('textarea')
+    textarea.value = text
+    textarea.style.position = 'fixed'
+    textarea.style.opacity = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    textarea.remove()
+  }
+
+  await positionFileNameTip(target, `已复制：${text}`)
+}
 function zoomScale(level: number) {
   return ({ 0.5: 0.44, 1: 0.52, 4: 0.68, 10: 0.82, 20: 1, 40: 1.55, 80: 2.35 }[level] || 1)
 }
 function objectProgress(item: AnalysisTaskObjectRecord) {
-  if (!task.value) return null
-  const objectRuns = getObjectRuns(task.value, item.id)
-  return objectRuns.length ? Math.round(objectRuns.reduce((total, run) => total + runProgress(run), 0) / objectRuns.length) : null
+  const runs = objectRuns(item)
+  return runs.length ? Math.round(runs.reduce((total, run) => total + runProgress(run), 0) / runs.length) : null
 }
 function selectResultModel(modelId: string) {
   activeResultModelId.value = modelId
@@ -531,16 +588,17 @@ async function toggleFullscreen() {
     <aside class="workbench-left">
       <div class="border-b border-white/[0.08] p-3">
         <button class="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-[#8f35b7]/55 bg-[#8f35b7]/10 font-medium text-[#e8b8f8] hover:bg-[#8f35b7]/18" @click="router.push('/workbench/tasks')"><ArrowLeft :size="17" />返回分析任务列表</button>
-        <div class="mt-3 flex items-start justify-between gap-3"><TaskNameHover :task="task" as="h1" name-class="min-w-0 truncate text-lg font-semibold" /><span :class="['shrink-0 rounded-md border px-2 py-1 text-xs', statusClass(task.status)]">{{ task.status }}</span></div>
+        <div class="mt-3 flex items-start justify-between gap-3"><h1 class="min-w-0 truncate text-lg font-semibold">{{ getTaskDisplayName(task) }}</h1><span :class="['shrink-0 rounded-md border px-2 py-1 text-xs', statusClass(task.status)]">{{ task.status }}</span></div>
       </div>
       <div class="border-b border-white/[0.08] p-3"><label class="flex h-10 items-center gap-2 rounded-md border border-white/[0.08] bg-[#17181d] px-3"><Search :size="16" class="text-[#64748b]" /><input v-model="search" class="w-full bg-transparent text-sm outline-none" placeholder="搜索 WSI / Case / 部位 / 染色" /></label></div>
-      <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+      <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" @scroll.passive="hideFileName">
         <article v-for="item in filteredObjects" :key="item.id" :class="['rounded-lg border p-3 transition', selectedObject?.id === item.id ? 'border-[#8f35b7] bg-[#8f35b7]/7' : 'border-white/[0.08] bg-[#17181d] hover:border-white/[0.14]']" @click="selectObject(item.id)">
-          <div class="flex gap-3"><img src="/wsi-cmu-region.jpg" alt="WSI" class="h-10 w-16 shrink-0 rounded object-cover" /><div class="min-w-0"><b class="block truncate text-sm" :title="item.name">{{ item.name }}</b><small class="mt-1 block text-[#748095]">{{ item.meta }}</small></div></div>
-          <div v-if="objectProgress(item) !== null" class="object-progress-anchor mt-3 border-t border-white/[0.06] pt-2" tabindex="0"><div class="flex justify-between text-xs text-[#748095]"><span>分析进度</span><span>{{ objectProgress(item) }}%</span></div><div class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#353740]"><div class="h-full rounded-full bg-[#9c36c7]" :style="{ width: `${objectProgress(item)}%` }" /></div><div v-if="getObjectRuns(task, item.id).length > 1" class="model-progress-details"><b class="model-progress-title">模型分析进度</b><div v-for="run in getObjectRuns(task, item.id)" :key="run.id"><div><span :title="run.name">{{ run.name }}</span><small>{{ run.status }} · {{ runProgress(run) }}%</small></div><i><b :style="{ width: `${runProgress(run)}%` }" /></i></div></div></div>
+          <div class="flex gap-3"><img src="/wsi-cmu-region.jpg" alt="WSI" class="h-10 w-16 shrink-0 rounded object-cover" /><div class="min-w-0 flex-1"><button type="button" class="wsi-file-name text-sm" :aria-label="`复制切片名称：${fileNameWithoutExtension(item.name)}`" @mouseenter="showFileName($event, item.name)" @mouseleave="hideFileName" @focus="showFileName($event, item.name)" @blur="hideFileName" @click.stop="copyFileName($event, item.name)"><span>{{ fileNameParts(item.name).head }}</span><em v-if="fileNameParts(item.name).tail">{{ fileNameParts(item.name).tail }}</em></button><small class="mt-1 block truncate text-[#748095]" :title="item.meta">{{ item.meta }}</small></div></div>
+          <div :class="['object-progress-summary mt-3 border-t border-white/[0.06] pt-2', objectRuns(item).length > 1 && 'has-multiple-models']"><div class="flex min-w-0 items-center justify-between gap-2 text-xs"><span v-if="!objectRuns(item).length" class="model-summary empty">未配置模型</span><span v-else-if="objectRuns(item).length === 1" class="model-summary" :title="objectRuns(item)[0].name">{{ objectRuns(item)[0].name }}</span><button v-else class="model-summary multiple" type="button" aria-haspopup="true" @click.stop>{{ objectRuns(item).length }} 个模型 <ChevronDown :size="12" /></button><span v-if="objectProgress(item) !== null" class="shrink-0 text-[#748095]">{{ objectProgress(item) }}%</span></div><div v-if="objectProgress(item) !== null" class="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[#353740]"><div class="h-full rounded-full bg-[#9c36c7]" :style="{ width: `${objectProgress(item)}%` }" /></div><div v-if="objectRuns(item).length > 1" class="model-progress-details"><b class="model-progress-title">模型分析进度</b><div v-for="run in objectRuns(item)" :key="run.id"><div><span :title="run.name">{{ run.name }}</span><small>{{ run.status }} · {{ runProgress(run) }}%</small></div><i><b :style="{ width: `${runProgress(run)}%` }" /></i></div></div></div>
           <div class="mt-3 flex items-center justify-between"><span :class="['rounded-md border px-2 py-1 text-xs', statusClass(item.status)]">{{ item.status }}</span><div class="flex gap-3"><button v-if="['待分析', '已停止'].includes(item.status)" class="text-xs text-[#ff9c9c]" @click.stop="deleteObject(item)">删除</button><button v-if="item.status !== '待分析'" class="text-xs text-[#f4c577]" @click.stop="objectAction(item)">{{ ['正在分析', '排队中'].includes(item.status) ? '停止' : '重新分析' }}</button></div></div>
         </article>
       </div>
+      <Teleport to="body"><div v-if="fileNameTip" ref="fileNameTipElement" class="wsi-file-name-tip" :style="{ left: `${fileNameTip.x}px`, top: `${fileNameTip.y}px` }" role="tooltip">{{ fileNameTip.text }}</div></Teleport>
       <section v-if="selectedObject" :class="['model-selection', modelSelectionLocked && 'locked']"><div class="flex items-center justify-between"><h3>分析模型</h3><span v-if="modelSelectionLocked" class="text-[10px] text-[#748095]">已锁定</span></div><p>{{ modelSelectionLocked ? '当前任务使用的模型配置。' : '为当前 WSI 选择模型。' }}</p><div class="mt-3 grid gap-2"><button v-for="model in visibleAnalysisModels" :key="model.id" :disabled="modelSelectionLocked || !isModelCompatible(model, selectedObject.stain)" :class="['model-option', selectedObject.modelIds.includes(model.id) && 'active']" @click="toggleModel(model.id)"><span><b>{{ model.name }}</b><small>{{ model.desc }}</small></span><span>{{ !isModelCompatible(model, selectedObject.stain) ? '不适用' : selectedObject.modelIds.includes(model.id) ? '已选' : '可选' }}</span></button></div></section>
       <div class="border-t border-white/[0.08] p-3"><div class="mb-2 flex justify-between text-xs text-[#748095]"><span>{{ task.objects.filter(item => item.modelIds.length).length }}/{{ task.objects.length }} 张 WSI 已配置模型</span><span>{{ taskProgress }}%</span></div><button v-if="['正在分析', '排队中'].includes(task.status)" class="flex h-10 w-full items-center justify-center gap-2 rounded-md border border-[#eab65b]/40 bg-[#eab65b]/10 font-medium text-[#f4c577]" @click="stopAll"><Square :size="14" class="fill-current" />停止全部</button><button v-else :disabled="!task.models.length" class="btn-primary h-10 w-full disabled:opacity-40" @click="startOrRestart"><Play :size="16" />{{ task.status === '待分析' ? '开始分析' : '重新分析任务' }}</button></div>
     </aside>
@@ -672,7 +730,7 @@ async function toggleFullscreen() {
 .viewer-toolbar-primary{gap:8px}.viewer-toolbar-actions{display:flex;min-width:0;flex:1;align-items:center;gap:5px}.viewer-toolbar-utilities{display:flex;flex:none;align-items:center;gap:2px;border-left:1px solid rgb(255 255 255 / .08);padding-left:8px}.viewer-toolbar-group-label{flex:none;padding:0 3px;color:#64748b;font-size:10px;font-weight:600}.viewer-toolbar-primary .viewer-button{position:relative;flex:none}.count-tool-badge{position:absolute;right:1px;top:1px;display:grid;min-width:12px;height:12px;place-items:center;border-radius:6px;background:#d292f4;padding:0 3px;color:#17181d;font-size:8px;font-weight:700}.viewer-toolbar-secondary{justify-content:flex-start}.active-layer-banner{right:14px;left:auto;max-width:60%;transform:none;white-space:nowrap}.active-layer-banner b{min-width:0;overflow:hidden;text-overflow:ellipsis}.active-layer-banner span{flex:none}
 .viewer-icon-button::after{position:absolute;left:50%;bottom:calc(100% + 7px);z-index:60;visibility:hidden;transform:translateX(-50%);border:1px solid rgb(255 255 255 / .12);border-radius:4px;background:#292b32;padding:5px 7px;color:#e2e8f0;box-shadow:0 8px 22px rgb(0 0 0 / .4);content:attr(data-tooltip);font-size:10px;line-height:1;opacity:0;pointer-events:none;white-space:nowrap}.viewer-icon-button:hover::after,.viewer-icon-button:focus-visible::after{visibility:visible;opacity:1}.viewer-icon-button:disabled::after{display:none}.viewer-toolbar-utilities .viewer-icon-button:last-child::after{right:0;left:auto;transform:none}.toolbar-tool-pair{display:flex;flex:none;align-items:center;gap:2px;border:1px solid rgb(255 255 255 / .07);border-radius:5px;background:#111217;padding:1px}.toolbar-tool-anchor{position:relative;flex:none}.viewer-tool-popover{position:absolute;left:50%;top:78px;z-index:45;width:220px;transform:translateX(-50%);border:1px solid rgb(255 255 255 / .12);border-radius:6px;background:#202126;padding:10px;box-shadow:0 18px 42px rgb(0 0 0 / .52)}.count-tool-popover header{display:flex;align-items:center;justify-content:space-between;font-size:12px}.count-tool-popover header span{color:#d292f4}.count-tool-popover footer{display:flex;justify-content:flex-end;gap:12px;margin-top:8px;border-top:1px solid rgb(255 255 255 / .06);padding-top:8px}.count-tool-popover footer button{display:flex;align-items:center;gap:4px;color:#94a3b8;font-size:10px}.count-tool-popover footer button:disabled{opacity:.3}
 .viewer-flyout{max-height:calc(100% - 164px);overflow:hidden;display:flex;flex-direction:column}.viewer-info-content{min-height:0;overflow-y:auto;padding:12px}.viewer-info-tabs{display:grid;height:34px;grid-template-columns:1fr 1fr;border-radius:5px;background:#17181d;padding:3px}.viewer-info-tabs button{border-radius:4px;color:#7f8a9e;font-size:11px}.viewer-info-tabs button.active{background:#3a2344;color:#e9c4f8}.viewer-metadata{margin-top:10px}.pixel-inspector{display:grid;gap:4px;border:1px solid rgb(143 53 183 / .42);border-radius:5px;background:rgb(143 53 183 / .12);padding:10px}.pixel-inspector span{color:#a78bb3;font-size:10px}.pixel-inspector b{color:#e8b8f8;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500}.viewer-metadata dl{margin-top:10px}.viewer-metadata dl>div{display:grid;min-height:31px;grid-template-columns:88px minmax(0,1fr);align-items:center;border-bottom:1px solid rgb(255 255 255 / .06);font-size:10px}.viewer-metadata dt{color:#778398}.viewer-metadata dd{overflow:hidden;color:#d2d9e4;text-align:right;text-overflow:ellipsis;white-space:nowrap}.viewer-labels{display:grid;gap:12px;margin-top:10px}.viewer-labels article>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}.viewer-labels article>header b{font-size:11px}.viewer-labels article>header span{color:#64748b;font-size:9px}.slide-label-preview{position:relative;display:flex;height:92px;overflow:hidden;flex-direction:column;justify-content:center;border:1px solid #d9d5ca;border-radius:4px;background:#ebe8dd;padding:12px;color:#24252b}.slide-label-preview::after{position:absolute;right:16px;bottom:13px;width:58px;height:25px;background:repeating-linear-gradient(90deg,#17181d 0 2px,transparent 2px 4px,#17181d 4px 5px,transparent 5px 7px);content:''}.slide-label-preview strong{max-width:190px;font-size:13px}.slide-label-preview span{margin-top:5px;color:#4b5563;font-size:10px}.slide-label-preview i{position:absolute;right:18px;top:14px;width:42px;height:18px;border:1px solid #7b8390;border-radius:9px}.viewer-labels img{display:block;width:100%;border:1px solid rgb(255 255 255 / .08);border-radius:4px;background:white}.macro-preview{height:128px;object-fit:cover;object-position:center}.thumbnail-preview{height:168px;object-fit:contain}
-.object-progress-anchor{position:relative;outline:none}.model-progress-details{position:absolute;left:-5px;right:-5px;top:calc(100% + 5px);z-index:60;display:none;gap:9px;border:1px solid rgb(255 255 255 / .12);border-radius:6px;background:rgb(17 18 23 / .98);padding:10px;box-shadow:0 16px 36px rgb(0 0 0 / .52)}.model-progress-details::before{position:absolute;right:0;bottom:100%;left:0;height:6px;content:''}.object-progress-anchor:hover .model-progress-details,.object-progress-anchor:focus-within .model-progress-details{display:grid}.model-progress-title{color:#cbd5e1;font-size:10px;font-weight:600}.model-progress-details>div>div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:9px}.model-progress-details span{min-width:0;overflow:hidden;color:#b7c0ce;text-overflow:ellipsis;white-space:nowrap}.model-progress-details small{flex:none;color:#64748b}.model-progress-details i{display:block;height:3px;margin-top:4px;overflow:hidden;border-radius:2px;background:#30323a}.model-progress-details i b{display:block;height:100%;border-radius:2px;background:#b45ed4}
+.wsi-file-name{display:flex;min-width:0;max-width:100%;align-items:baseline;color:inherit;font-weight:600;cursor:pointer;outline:none}.wsi-file-name:hover,.wsi-file-name:focus-visible{color:#e8b8f8}.wsi-file-name span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wsi-file-name em{flex:none;font-style:normal;white-space:nowrap}.wsi-file-name-tip{position:fixed;z-index:90;width:max-content;max-width:min(420px,calc(100vw - 24px));border:1px solid rgb(255 255 255 / .12);border-radius:5px;background:#292b32;padding:7px 9px;color:#e2e8f0;box-shadow:0 10px 28px rgb(0 0 0 / .42);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;line-height:1.45;overflow-wrap:anywhere;pointer-events:none}.object-progress-summary{position:relative;min-height:31px}.model-summary{min-width:0;overflow:hidden;color:#cbd5e1;font-weight:600;text-overflow:ellipsis;white-space:nowrap}.model-summary.empty{color:#64748b;font-weight:500}.model-summary.multiple{display:flex;align-items:center;gap:3px;color:#d292f4}.model-summary.multiple:hover,.model-summary.multiple:focus-visible{color:#edc8fa;outline:none}.model-progress-details{position:absolute;left:-5px;right:-5px;top:calc(100% + 5px);z-index:60;display:none;gap:9px;border:1px solid rgb(255 255 255 / .12);border-radius:6px;background:rgb(17 18 23 / .98);padding:10px;box-shadow:0 16px 36px rgb(0 0 0 / .52)}.model-progress-details::before{position:absolute;right:0;bottom:100%;left:0;height:6px;content:''}.object-progress-summary.has-multiple-models:hover .model-progress-details,.object-progress-summary.has-multiple-models:focus-within .model-progress-details{display:grid}.model-progress-title{color:#cbd5e1;font-size:10px;font-weight:600}.model-progress-details>div>div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:9px}.model-progress-details span{min-width:0;overflow:hidden;color:#b7c0ce;text-overflow:ellipsis;white-space:nowrap}.model-progress-details small{flex:none;color:#64748b}.model-progress-details i{display:block;height:3px;margin-top:4px;overflow:hidden;border-radius:2px;background:#30323a}.model-progress-details i b{display:block;height:100%;border-radius:2px;background:#b45ed4}
 .active-result-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;border-top:1px solid rgb(255 255 255 / .07);padding-top:11px}.active-result-summary b,.active-result-summary small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.active-result-summary small{margin-top:2px}.active-result-summary em{flex:none;color:#8490a3;font-size:10px;font-style:normal}.result-model-switcher{display:grid;flex:none;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:6px;border-bottom:1px solid rgb(255 255 255 / .08);padding:8px 10px;background:#191a20}.result-model-switcher button{min-width:0;height:48px;border:1px solid rgb(255 255 255 / .08);border-radius:5px;padding:7px 9px;text-align:left}.result-model-switcher span,.result-model-switcher small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.result-model-switcher span{color:#b7c0ce;font-size:11px;font-weight:600}.result-model-switcher small{margin-top:3px;color:#64748b;font-size:9px}.result-model-switcher button.active{border-color:rgb(143 53 183 / .72);background:rgb(143 53 183 / .18)}.result-model-switcher button.active span{color:#e9c4f8}.result-model-switcher button.active small{color:#b886ca}.results-empty{display:grid;min-height:0;flex:1;place-content:center;justify-items:center;padding:24px;color:#64748b;text-align:center}.results-empty b{margin-top:10px;color:#cbd5e1;font-size:13px}.results-empty p{margin-top:5px;max-width:240px;font-size:11px;line-height:1.7}
 .metric-grid>div,.feature-summary>div{min-width:0}.metric-grid span,.feature-summary span,.metric-grid b,.feature-summary b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.quality-list{margin-top:8px}.quality-list>div{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgb(255 255 255 / .06);padding:8px 0;font-size:11px}.quality-list dt{color:#8490a3}.quality-list dd{color:#d8dee9}.classification-list{margin-top:9px}.classification-list>div{display:grid;grid-template-columns:minmax(0,1fr) 72px 34px;align-items:center;gap:8px;border-bottom:1px solid rgb(255 255 255 / .06);padding:8px 0;font-size:10px}.classification-list span{overflow:hidden;color:#9aa6b8;text-overflow:ellipsis;white-space:nowrap}.classification-list strong{font-weight:500;text-align:right}.classification-list small{color:#64748b;text-align:right}
 @media (max-width:1500px){.workbench-shell{grid-template-columns:292px minmax(0,1fr) 350px}.viewer-toolbar-primary,.viewer-toolbar-secondary{padding-inline:8px}.tool-toggle{padding-inline:7px}.opacity-control{min-width:148px}.viewer-meta{display:none}}

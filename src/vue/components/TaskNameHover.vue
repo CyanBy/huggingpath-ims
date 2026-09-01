@@ -71,7 +71,13 @@ onBeforeUnmount(hide)
           <span>所属项目</span>
           <div class="project-list"><b v-for="item in details.projects" :key="`project-${item}`">{{ item }}</b></div>
         </section>
-        <section class="case-scope">
+        <section v-if="details.scopeType === 'WSI'" class="slide-scope">
+          <span>切片列表</span>
+          <div class="slide-list">
+            <p v-for="slide in details.slides" :key="slide" :title="slide"><i />{{ slide }}</p>
+          </div>
+        </section>
+        <section v-else class="case-scope">
           <span>Case 与切片</span>
           <article v-for="group in details.caseGroups" :key="group.caseLabel" class="case-group">
             <div class="case-heading">
@@ -157,6 +163,35 @@ onBeforeUnmount(hide)
   border: 1px solid rgb(255 255 255 / .08);
   border-radius: 6px;
   background: #191a1f;
+}
+.slide-list {
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / .08);
+  border-radius: 6px;
+  background: #191a1f;
+}
+.slide-list p {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  overflow: hidden;
+  padding: 7px 9px;
+  color: #e2e8f0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.slide-list p + p {
+  border-top: 1px solid rgb(255 255 255 / .04);
+}
+.slide-list i {
+  width: 5px;
+  height: 5px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #64748b;
 }
 .case-group + .case-group {
   margin-top: 8px;

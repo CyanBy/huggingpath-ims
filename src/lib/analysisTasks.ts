@@ -64,6 +64,7 @@ export interface AnalysisModelRunRecord {
 
 export interface AnalysisTaskRecord {
   id: string;
+  taskNumber: string;
   taskName: string;
   sourceType: AnalysisTaskSourceType;
   sourceLabel: AnalysisTaskSourceLabel;
@@ -112,6 +113,12 @@ function nowText() {
   const pad = (value: number) => String(value).padStart(2, '0');
 
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function buildTaskNumber(taskId: string, createdAt: string) {
+  const timestamp = createdAt.replace(/\D/g, '').slice(0, 12).padEnd(12, '0');
+  const suffix = taskId.replace(/[^a-z0-9]/gi, '').slice(-4).toUpperCase().padStart(4, '0');
+  return `AT-${timestamp.slice(0, 8)}-${timestamp.slice(8)}-${suffix}`;
 }
 
 function dispatchTaskChange() {
@@ -241,30 +248,17 @@ export function buildTaskDisplayName(objects: AnalysisTaskObjectRecord[], contex
     return 'Case 分析';
   }
 
-  const allFromSameCase = caseIds.length === 1 && objects.every((item) => item.caseId?.trim() === caseIds[0]);
-  if (allFromSameCase) return caseIds[0];
-
-  const allFromSameProject = projectNames.length === 1
-    && objects.every((item) => (item.projectName || item.projectId)?.trim() === projectNames[0]);
-  if (allFromSameProject) return projectNames[0];
-
-  return `${objects[0].name} 等`;
+  return `${objects[0].name} 等 ${objects.length} 张 WSI`;
 }
 
-export function getTaskDisplayName(task: Pick<AnalysisTaskRecord, 'objects' | 'objectType' | 'caseCount' | 'projectCount'>) {
-  return buildTaskDisplayName(task.objects || [], task);
+export function getTaskDisplayName(task: Pick<AnalysisTaskRecord, 'id' | 'createdAt'> & Partial<Pick<AnalysisTaskRecord, 'taskNumber'>>) {
+  return task.taskNumber || buildTaskNumber(task.id, task.createdAt);
 }
 
 export function getTaskDisplaySubtitle(task: Pick<AnalysisTaskRecord, 'objects' | 'objectType' | 'caseCount' | 'projectCount'>) {
-  if (task.objects.length === 1) {
-    return task.objects[0].caseId ? `所属 Case：${task.objects[0].caseId}` : '单张 WSI 分析';
-  }
   if (task.objectType === '研究项目') return '研究项目分析';
   if (task.objectType === 'Case') return (task.caseCount || 0) > 1 ? '批量 Case 分析' : 'Case 分析';
-
-  const caseIds = uniqueLabels(task.objects.map((item) => item.caseId));
-  const allFromSameCase = caseIds.length === 1 && task.objects.every((item) => item.caseId?.trim() === caseIds[0]);
-  return allFromSameCase ? '同一 Case 下的切片' : '批量 WSI 分析';
+  return task.objects.length === 1 ? '单张 WSI 分析' : '批量 WSI 分析';
 }
 
 export type TaskObjectSummary = {
@@ -294,16 +288,30 @@ export type TaskCaseSlideGroup = {
 };
 
 export type TaskNameDetails = {
+  scopeType: AnalysisObjectType;
   slideCount: number;
   caseCount: number;
   unboundSlideCount: number;
   caseGroups: TaskCaseSlideGroup[];
   projects: string[];
+  slides: string[];
 };
 
-export function getTaskNameDetails(task: Pick<AnalysisTaskRecord, 'objects'>): TaskNameDetails | null {
+export function getTaskNameDetails(task: Pick<AnalysisTaskRecord, 'objects' | 'objectType'>): TaskNameDetails | null {
   const objects = task.objects || [];
   if (objects.length <= 1) return null;
+
+  if (task.objectType === 'WSI') {
+    return {
+      scopeType: 'WSI',
+      slideCount: objects.length,
+      caseCount: 0,
+      unboundSlideCount: 0,
+      caseGroups: [],
+      projects: [],
+      slides: uniqueLabels(objects.map((item) => item.name)),
+    };
+  }
 
   const groups = new Map<string, { slideCount: number; slides: string[] }>();
   objects.forEach((object) => {
@@ -317,11 +325,13 @@ export function getTaskNameDetails(task: Pick<AnalysisTaskRecord, 'objects'>): T
   const caseGroups = [...groups.entries()].map(([caseLabel, group]) => ({ caseLabel, ...group }));
   const unboundSlideCount = groups.get('未绑定 Case')?.slideCount || 0;
   return {
+    scopeType: task.objectType,
     slideCount: objects.length,
     caseCount: caseGroups.filter((group) => group.caseLabel !== '未绑定 Case').length,
     unboundSlideCount,
     caseGroups,
     projects: uniqueLabels(objects.map((item) => item.projectName || item.projectId)),
+    slides: [],
   };
 }
 
@@ -414,18 +424,23 @@ function normalizeTask(raw: unknown): AnalysisTaskRecord | null {
   }
 
   const resolvedObjectType = task.objectType || (sourceType === 'case' ? 'Case' : sourceType === 'project' ? '研究项目' : 'WSI');
-  const resolvedCaseCount = task.caseCount ?? new Set(objects.map((object) => object.caseId).filter(Boolean)).size;
+  const resolvedCaseCount = resolvedObjectType === 'WSI'
+    ? undefined
+    : task.caseCount ?? new Set(objects.map((object) => object.caseId).filter(Boolean)).size;
   const resolvedProjectCount = task.projectCount ?? new Set(objects.map((object) => object.projectId).filter(Boolean)).size;
 
+  const id = task.id || newId('task');
+  const createdAt = task.createdAt || nowText();
   const normalized: AnalysisTaskRecord = {
-    id: task.id || newId('task'),
+    id,
+    taskNumber: task.taskNumber || buildTaskNumber(id, createdAt),
     taskName: task.taskName || '未命名分析任务',
     sourceType,
     sourceLabel: task.sourceLabel || (sourceType === 'case' ? 'Case 管理' : sourceType === 'project' ? '研究项目管理' : sourceType === 'model_center' ? '模型中心' : 'WSI 管理'),
     objectType: resolvedObjectType,
     objectCount: objectCountText(objects.length),
     status,
-    createdAt: task.createdAt || nowText(),
+    createdAt,
     modelLocked: Boolean(task.modelLocked),
     caseCount: resolvedCaseCount,
     projectCount: resolvedProjectCount || task.projectCount,
@@ -999,15 +1014,18 @@ function buildTask(args: {
   caseCount?: number;
   projectCount?: number;
 }) {
+  const id = newId('task');
+  const createdAt = nowText();
   const task: AnalysisTaskRecord = {
-    id: newId('task'),
+    id,
+    taskNumber: buildTaskNumber(id, createdAt),
     taskName: args.taskName || buildTaskDisplayName(args.objects, args),
     sourceType: args.sourceType,
     sourceLabel: args.sourceLabel,
     objectType: args.objectType,
     objectCount: objectCountText(args.objects.length),
     status: '待分析',
-    createdAt: nowText(),
+    createdAt,
     modelLocked: args.modelLocked,
     caseCount: args.caseCount,
     projectCount: args.projectCount,
@@ -1056,7 +1074,7 @@ export function createTaskFromSelection(args: {
     objectType,
     modelLocked: sourceType === 'model_center',
     objects,
-    caseCount,
+    caseCount: objectType === 'WSI' ? undefined : caseCount,
     projectCount: objectType === '研究项目' ? projectCount : undefined,
   });
 
