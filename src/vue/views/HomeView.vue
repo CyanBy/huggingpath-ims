@@ -4,6 +4,7 @@ import { ArrowRight, BarChart3, BrainCircuit, Database, Layers, Microscope, Netw
 import { MODEL_CATALOG } from '@/lib/modelCatalog'
 
 const router = useRouter()
+const communityStats = [[String(MODEL_CATALOG.length), '开源模型'], ['12', '研究项目'], ['4', '协作机构']]
 </script>
 
 <template>
@@ -50,7 +51,7 @@ const router = useRouter()
     </section>
 
     <section class="py-16">
-      <div class="section-container"><div class="mb-7 flex items-end justify-between"><div><p class="text-xs uppercase tracking-[.14em]">MODEL CATALOG</p><h2 class="mt-2 text-2xl font-semibold">当前可用模型</h2></div><button class="text-sm text-[#d292f4]" @click="router.push('/explore')">查看全部 <ArrowRight :size="14" class="inline" /></button></div><div class="grid gap-4 md:grid-cols-3"><button v-for="model in MODEL_CATALOG.slice(0,3)" :key="model.id" class="rounded-lg border border-white/[0.07] bg-[#202126] p-5 text-left hover:border-[#8f35b7]/40" @click="router.push(`/model/${encodeURIComponent(model.id)}`)"><h3 class="font-semibold">{{ model.name }}</h3><code class="mt-1 block text-xs text-[#64748b]">{{ model.id }}</code><p class="mt-3 text-sm leading-6">{{ model.summary }}</p></button></div></div>
+      <div class="section-container"><div class="mb-7 flex items-end justify-between"><div><p class="text-xs uppercase tracking-[.14em]">MODEL CATALOG</p><h2 class="mt-2 text-2xl font-semibold">当前可用模型</h2></div><button class="text-sm text-[#d292f4]" @click="router.push('/explore')">查看全部 <ArrowRight :size="14" class="inline" /></button></div><div class="grid gap-4 md:grid-cols-2"><button v-for="model in MODEL_CATALOG" :key="model.id" class="rounded-lg border border-white/[0.07] bg-[#202126] p-5 text-left hover:border-[#8f35b7]/40" @click="router.push(`/model/${encodeURIComponent(model.id)}`)"><h3 class="font-semibold">{{ model.name }}</h3><code class="mt-1 block text-xs text-[#64748b]">{{ model.id }}</code><p class="mt-3 text-sm leading-6">{{ model.summary }}</p></button></div></div>
     </section>
 
     <section class="border-y border-white/[0.06] bg-[#17181d] py-16">
@@ -69,7 +70,7 @@ const router = useRouter()
 
     <section class="section-container py-16">
       <div class="grid gap-8 lg:grid-cols-[1fr_1.1fr]">
-        <div><p class="text-xs uppercase tracking-[.14em]">OPEN COMMUNITY</p><h2 class="mt-2 text-2xl font-semibold">共建病理AI社区</h2><p class="mt-4 text-sm leading-7">开源、开放、协作，让优秀的病理 AI 模型被更多研究者发现、验证和使用。</p><div class="mt-7 grid grid-cols-3 gap-3"><div v-for="item in [['8+','开源模型'],['12','研究项目'],['4','协作机构']]" :key="item[1]" class="border-t border-white/[0.10] pt-3"><strong class="text-2xl">{{ item[0] }}</strong><small class="mt-1 block text-[#64748b]">{{ item[1] }}</small></div></div></div>
+        <div><p class="text-xs uppercase tracking-[.14em]">OPEN COMMUNITY</p><h2 class="mt-2 text-2xl font-semibold">共建病理AI社区</h2><p class="mt-4 text-sm leading-7">开源、开放、协作，让优秀的病理 AI 模型被更多研究者发现、验证和使用。</p><div class="mt-7 grid grid-cols-3 gap-3"><div v-for="item in communityStats" :key="item[1]" class="border-t border-white/[0.10] pt-3"><strong class="text-2xl">{{ item[0] }}</strong><small class="mt-1 block text-[#64748b]">{{ item[1] }}</small></div></div></div>
         <div class="grid gap-4 sm:grid-cols-2"><article class="rounded-lg border border-white/[0.07] bg-[#202126] p-5"><Users :size="21" class="text-[#d292f4]" /><h3 class="mt-4 font-semibold">研究协作</h3><p class="mt-2 text-sm leading-6">通过机构、角色和项目成员关系管理团队协作范围。</p></article><article class="rounded-lg border border-white/[0.07] bg-[#202126] p-5"><ShieldCheck :size="21" class="text-[#d292f4]" /><h3 class="mt-4 font-semibold">可控的数据边界</h3><p class="mt-2 text-sm leading-6">公开项目与机构私有数据使用清晰的权限边界。</p></article></div>
       </div>
     </section>

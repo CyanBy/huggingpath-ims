@@ -1,20 +1,21 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 import { ArrowRight, BarChart3, Box, Check, Code, GitFork, HeartPulse, Microscope, Network, Server, ShieldCheck, Users } from '@lucide/vue'
+import { MODEL_CATALOG } from '@/lib/modelCatalog'
 
 const router = useRouter()
-const leaderboard = [
-  ['1', 'CellViT++', '胃、肠、乳腺', '0.89', '0.85', '0.92'],
-  ['2', 'Hover-Net', '肺、肝、肾', '0.85', '0.82', '0.88'],
-  ['3', 'DeepLIIF', '乳腺、前列腺', '0.82', '0.88', '-'],
-  ['4', 'TME Analyzer', '胃、肠、肺', '0.78', '-', '0.91'],
-]
+const benchmarkMetrics: Record<string, string[]> = {
+  'ai4path/cellvit-v2': ['胃、肠、乳腺', '0.89', '0.85', '0.92'],
+  'mod-tme': ['胃、肠、肺', '0.78', '-', '0.91'],
+}
+const leaderboard = MODEL_CATALOG.map((model, index) => [String(index + 1), model.name, ...benchmarkMetrics[model.id]])
+const platformStats = [[String(MODEL_CATALOG.length), '开源AI模型'], ['200+', '公开数据集'], ['1,000+', '社区用户'], ['30+', '贡献者']]
 </script>
 
 <template>
   <div>
     <section class="border-b border-white/[0.06] pb-14 pt-20"><div class="section-container max-w-[1040px]"><span class="text-xs tracking-[.16em] text-[#64748b]">ABOUT HUGGINGPATH</span><h1 class="mt-3 text-4xl font-semibold">让病理 AI 更容易进入真实研究流程</h1><p class="mt-5 max-w-[760px] text-lg leading-8">HuggingPath 将模型发现、病理数据管理、任务运行与机构治理放在同一个工作环境中，让研究者把时间用于判断结果，而不是在工具之间搬运上下文。</p></div></section>
-    <section class="section-container max-w-[1040px] py-14"><div class="grid grid-cols-2 gap-4 border-y border-white/[0.07] py-6 sm:grid-cols-4"><div v-for="item in [['50+','开源AI模型'],['200+','公开数据集'],['1,000+','社区用户'],['30+','贡献者']]" :key="item[1]" class="text-center"><strong class="text-2xl text-[#e2e8f0]">{{ item[0] }}</strong><small class="mt-1 block text-[#64748b]">{{ item[1] }}</small></div></div><div class="mt-12 grid gap-5 md:grid-cols-3"><article v-for="item in [
+    <section class="section-container max-w-[1040px] py-14"><div class="grid grid-cols-2 gap-4 border-y border-white/[0.07] py-6 sm:grid-cols-4"><div v-for="item in platformStats" :key="item[1]" class="text-center"><strong class="text-2xl text-[#e2e8f0]">{{ item[0] }}</strong><small class="mt-1 block text-[#64748b]">{{ item[1] }}</small></div></div><div class="mt-12 grid gap-5 md:grid-cols-3"><article v-for="item in [
       { icon: Box, title: '模型统一管理', text: '统一描述开源模型能力、运行要求与版本，支持从模型中心快速创建任务。' },
       { icon: Microscope, title: 'WSI分析工作台', text: '支持多层级查看、标注叠加、模型进度和结果可视化。' },
       { icon: BarChart3, title: '标准化评估体系', text: '通过公开验证集与统一指标比较模型输出，保留完整分析记录。' },

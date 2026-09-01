@@ -5,6 +5,7 @@ import type {
   UploadWsiRow,
   WsiSelectionItem,
 } from './analysisSelection';
+import { MODEL_CATALOG } from './modelCatalog';
 
 export type AnalysisTaskSourceType = 'model_center' | 'wsi' | 'case' | 'project';
 export type AnalysisTaskSourceLabel = '模型中心' | 'WSI 管理' | 'Case 管理' | '研究项目管理';
@@ -18,14 +19,17 @@ export interface AnalysisModelDefinition {
   stains: string[];
 }
 
-export const AVAILABLE_ANALYSIS_MODELS: AnalysisModelDefinition[] = [
-  { id: 'mod-cellvit', name: 'CellViT++', desc: '细胞核检测与分割', stains: ['H&E', 'HE', 'Ki-67', 'Ki67', 'HER2', 'PAS', 'IHC'] },
-  { id: 'mod-tme', name: 'TME Analyzer', desc: '肿瘤微环境分析', stains: ['H&E', 'HE'] },
-  { id: 'mod-sam', name: 'CellViT-SAM', desc: '基于 SAM 的细胞分割', stains: ['H&E', 'HE', 'Ki-67', 'Ki67', 'HER2', 'PAS', 'IHC'] },
-  { id: 'mod-ki67', name: 'Ki67 Quantification', desc: 'Ki-67 阳性率定量', stains: ['Ki-67', 'Ki67', 'IHC'] },
-  { id: 'mod-her2', name: 'HER2 Analyzer', desc: 'HER2 免疫组化分级', stains: ['HER2', 'IHC'] },
-  { id: 'mod-histoqc', name: 'HistoQC', desc: 'WSI 图像质量评估', stains: ['H&E', 'HE', 'Ki-67', 'Ki67', 'HER2', 'PAS', 'IHC'] },
-];
+export const AVAILABLE_ANALYSIS_MODELS: AnalysisModelDefinition[] = MODEL_CATALOG.map((model) => ({
+  id: model.id,
+  name: model.name,
+  desc: model.analysisDescription,
+  stains: model.supportedStains,
+}));
+
+const AVAILABLE_ANALYSIS_MODEL_IDS = new Set(AVAILABLE_ANALYSIS_MODELS.map((model) => model.id));
+const LEGACY_PENDING_MODEL_IDS: Record<string, string> = {
+  'mod-cellvit': 'ai4path/cellvit-v2',
+};
 
 export interface AnalysisTaskObjectRecord {
   id: string;
@@ -325,6 +329,14 @@ function objectCountText(objectCount: number) {
   return `${objectCount} 张 WSI`;
 }
 
+function normalizeConfiguredModelIds(modelIds: string[], status: AnalysisTaskStatus) {
+  const uniqueIds = [...new Set(modelIds.filter(Boolean))];
+  if (status !== '待分析') return uniqueIds;
+
+  return [...new Set(uniqueIds.map((modelId) => LEGACY_PENDING_MODEL_IDS[modelId] || modelId))]
+    .filter((modelId) => AVAILABLE_ANALYSIS_MODEL_IDS.has(modelId));
+}
+
 function normalizeTask(raw: unknown): AnalysisTaskRecord | null {
   if (!raw || typeof raw !== 'object') return null;
   const task = raw as Partial<AnalysisTaskRecord> & {
@@ -333,14 +345,16 @@ function normalizeTask(raw: unknown): AnalysisTaskRecord | null {
   };
 
   const sourceType = task.sourceType || 'wsi';
+  const status = task.status || '待分析';
   const oldModels = Array.isArray(task.models) ? task.models : [];
   const legacyModelIds = [...new Set(oldModels.map((model) => model.modelId || model.id).filter(Boolean) as string[])];
 
   const objects: AnalysisTaskObjectRecord[] = (Array.isArray(task.objects) ? task.objects : []).map((object, index) => {
     const inferred = inferObjectFields(object.meta || '', index);
-    const modelIds = Array.isArray(object.modelIds)
+    const storedModelIds = Array.isArray(object.modelIds)
       ? object.modelIds.filter(Boolean)
       : legacyModelIds;
+    const modelIds = normalizeConfiguredModelIds(storedModelIds, status);
 
     const legacyProjectId = task.objectType === '研究项目'
       ? object.caseId?.match(/^(project-[^-]+)-case-/)?.[1]
@@ -368,8 +382,9 @@ function normalizeTask(raw: unknown): AnalysisTaskRecord | null {
 
   const oldRunMap = new Map<string, AnalysisModelRunRecord>();
   oldModels.forEach((model, index) => {
-    const modelId = model.modelId || model.id;
-    if (!modelId) return;
+    const storedModelId = model.modelId || model.id;
+    if (!storedModelId) return;
+    const modelId = status === '待分析' ? LEGACY_PENDING_MODEL_IDS[storedModelId] || storedModelId : storedModelId;
     const objectId = model.objectId || objects[Math.min(index, Math.max(objects.length - 1, 0))]?.id || objects[0]?.id;
     if (!objectId) return;
     const object = objects.find((item) => item.id === objectId) || objects[0];
@@ -389,7 +404,6 @@ function normalizeTask(raw: unknown): AnalysisTaskRecord | null {
   });
 
   let models = rebuildRuns(objects, [...oldRunMap.values()]);
-  const status = task.status || '待分析';
 
   if (status === '正在分析' && models.length && !models.some((model) => model.status === '正在分析')) {
     models = models.map((model, index) => ({

@@ -48,9 +48,11 @@ const editingOrgId = ref<string | null>(null)
 const orgForm = ref({ name: '', code: '', type: '病理中心', quota: '1 TB', status: 'active' as AccountStatus })
 const formError = ref('')
 const modelStates = ref<Record<string, boolean>>(Object.fromEntries(MODEL_CATALOG.map((model) => [model.id, true])))
+const cellvitName = MODEL_CATALOG.find((model) => model.id === 'ai4path/cellvit-v2')?.name || 'CellViT V2'
+const tmeName = MODEL_CATALOG.find((model) => model.id === 'mod-tme')?.name || 'TME Analyzer'
 const gpuRows = [
-  { name: 'GPU 1', model: 'NVIDIA RTX 4090', usage: 72, memory: '17.4 / 24 GB', temperature: '63°C', runningTask: 'CellViT++ · TASK-20260520-001' },
-  { name: 'GPU 2', model: 'NVIDIA RTX 4090', usage: 38, memory: '9.2 / 24 GB', temperature: '51°C', runningTask: 'TME Analyzer · TASK-20260520-004' },
+  { name: 'GPU 1', model: 'NVIDIA RTX 4090', usage: 72, memory: '17.4 / 24 GB', temperature: '63°C', runningTask: `${cellvitName} · TASK-20260520-001` },
+  { name: 'GPU 2', model: 'NVIDIA RTX 4090', usage: 38, memory: '9.2 / 24 GB', temperature: '51°C', runningTask: `${tmeName} · TASK-20260520-004` },
 ]
 const serviceRows = [
   { name: 'Redis', desc: '缓存 / 队列状态正常', metric: '内存 1.8 GB · 命中率 98.6%' },

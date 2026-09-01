@@ -41,7 +41,7 @@ onUnmounted(() => window.removeEventListener('pointerdown', closeMenus))
     </section>
 
     <section class="section-container py-8 pb-20">
-      <div :class="viewMode === 'card' ? 'grid gap-5 md:grid-cols-2 xl:grid-cols-3' : 'grid gap-3'">
+      <div :class="viewMode === 'card' ? 'grid gap-5 md:grid-cols-2' : 'grid gap-3'">
         <article v-for="model in MODEL_CATALOG" :key="model.id" :class="['group border border-white/[0.07] bg-[#24262c] transition-all hover:border-[#8f35b7]/40', viewMode === 'card' ? 'rounded-lg p-5' : 'grid grid-cols-[minmax(200px,.8fr)_minmax(0,1.6fr)_auto] items-center gap-5 rounded-lg px-5 py-4']">
           <div><h2 class="font-semibold group-hover:text-[#d292f4]">{{ model.name }}</h2><code class="mt-1 block text-xs text-[#64748b]">{{ model.id }}</code></div>
           <p :class="['text-sm leading-6', viewMode === 'card' && 'mt-4 min-h-12']">{{ model.summary }}</p>
