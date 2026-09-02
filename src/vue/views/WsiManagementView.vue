@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { AlertTriangle, ChevronLeft, ChevronRight, Database, FileImage, Plus, Search, Upload, X } from '@lucide/vue'
 import { countWsiSuccessfulAnalyses, createTaskFromWsi, createTaskFromWsis, type AnalysisTaskStatus } from '@/lib/analysisTasks'
@@ -18,7 +18,7 @@ const route = useRoute()
 const { wsis, cases, refresh } = useWorkspaceData()
 const { tasks } = useAnalysisTasks()
 const keyword = ref('')
-const selectedIds = ref<string[]>(readSelection())
+const selectedIds = ref<string[]>([])
 const previewId = ref<string | null>(null)
 const deleteTarget = ref<WorkspaceWsi | null>(null)
 const deleteScope = ref<PathologyDeletionScope>('wsi')
@@ -32,14 +32,6 @@ const bulkStain = ref('')
 const bulkCase = ref('')
 const dicomSummary = ref<{ series: number; instances: number; ignored: number } | null>(null)
 const stains = ['HE', 'IHC', 'PAS', 'Ki67', 'HER2']
-
-function readSelection() {
-  try { const value = JSON.parse(sessionStorage.getItem('huggingpath.workbench.wsiSelection.v1') || '[]'); return Array.isArray(value) ? value : [] } catch { return [] }
-}
-watch(selectedIds, (value) => {
-  if (value.length) sessionStorage.setItem('huggingpath.workbench.wsiSelection.v1', JSON.stringify(value))
-  else sessionStorage.removeItem('huggingpath.workbench.wsiSelection.v1')
-}, { deep: true })
 
 const filtered = computed(() => {
   const query = keyword.value.trim().toLowerCase()
@@ -173,15 +165,14 @@ function applyBulk() {
 }
 function confirmImport() {
   if (!canImport.value) return
-  const importedIds = pending.value.map((item) => item.id)
   writeWorkspaceWsis([...wsis.value, ...pending.value])
-  selectedIds.value = importedIds
+  selectedIds.value = []
   const returnTo = typeof route.query.returnTo === 'string' ? route.query.returnTo : ''
   closeUpload(); refresh()
   if (returnTo.startsWith('/') && !returnTo.startsWith('//')) router.push(returnTo)
 }
 onMounted(() => {
-  selectedIds.value = selectedIds.value.filter((id) => wsis.value.some((item) => item.id === id))
+  sessionStorage.removeItem('huggingpath.workbench.wsiSelection.v1')
   const requestedPreview = typeof route.query.preview === 'string' ? route.query.preview : ''
   if (requestedPreview && wsis.value.some((item) => item.id === requestedPreview)) previewId.value = requestedPreview
   if (route.query.upload === '1') openUpload()
@@ -207,10 +198,10 @@ onMounted(() => {
             <h3 class="font-semibold">选择待导入内容</h3><p class="mt-1 text-sm">普通 WSI 按文件导入；DICOM 文件夹会递归扫描并按目录归为序列。</p>
             <div class="mt-4 grid gap-3 md:grid-cols-2"><button class="upload-choice border-[#8f35b7]/35 bg-[#8f35b7]/10" @click="fileInput?.click()"><span class="choice-icon text-[#d292f4]"><FileImage :size="22" /></span><span><b>选择 WSI 文件</b><small>.svs / .sdpc / .tiff / .tif</small></span><span class="choice-action">选择文件</span></button><button class="upload-choice border-[#22d3ee]/30 bg-[#22d3ee]/5" @click="folderInput?.click()"><span class="choice-icon text-[#67e8f9]"><Database :size="22" /></span><span><b>选择 DICOM 文件夹</b><small>递归扫描多层目录并形成序列</small></span><span class="choice-action border-[#22d3ee]/40 text-[#67e8f9]">选择文件夹</span></button><input ref="fileInput" class="hidden" type="file" multiple accept=".svs,.sdpc,.tiff,.tif" @change="selectFiles(($event.target as HTMLInputElement).files)" /><input ref="folderInput" class="hidden" type="file" multiple accept=".dcm,application/dicom" @change="selectDicomFolder(($event.target as HTMLInputElement).files)" /></div>
             <div v-if="dicomSummary" class="mt-3 rounded-md border border-[#22d3ee]/25 bg-[#22d3ee]/5 px-4 py-3 text-sm text-[#a5f3fc]">已识别 {{ dicomSummary.series }} 个 DICOM 序列，共 {{ dicomSummary.instances }} 个实例；忽略 {{ dicomSummary.ignored }} 个非 DICOM 文件。</div>
-            <div class="mt-5 rounded-lg border border-white/[0.08] bg-[#17181d] p-4"><div class="mb-3 flex justify-between"><b>批量设置</b><span class="text-xs text-[#64748b]">当前待导入 {{ pending.length }} 项</span></div><div class="grid gap-2 md:grid-cols-[1.2fr_1fr_.7fr_1.3fr_auto]"><SearchableSelect v-model="bulkSite" :options="bulkSiteOptions" search-placeholder="搜索取材部位" /><select v-model="bulkSampling" class="input-field"><option value="">不批量修改方式</option><option v-for="item in SAMPLING_METHOD_OPTIONS" :key="item.value" :value="item.value">{{ item.label }}</option></select><select v-model="bulkStain" class="input-field"><option value="">不批量修改染色</option><option v-for="item in stains" :key="item">{{ item }}</option></select><SearchableSelect v-model="bulkCase" :options="bulkCaseOptions" search-placeholder="搜索 Case 编号或取材信息" /><button class="btn-secondary" @click="applyBulk">应用到列表</button></div></div>
+            <div class="mt-5 rounded-lg border border-white/[0.08] bg-[#17181d] p-4"><div class="mb-3 flex justify-between"><b>批量设置</b><span class="text-xs text-[#64748b]">当前待导入 {{ pending.length }} 项</span></div><div class="grid gap-2 md:grid-cols-[1.2fr_1fr_.7fr_1.3fr_auto]"><SearchableSelect v-model="bulkSite" class="bulk-search-select" :options="bulkSiteOptions" search-placeholder="搜索取材部位" /><select v-model="bulkSampling" class="upload-bulk-select"><option value="">不批量修改方式</option><option v-for="item in SAMPLING_METHOD_OPTIONS" :key="item.value" :value="item.value">{{ item.label }}</option></select><select v-model="bulkStain" class="upload-bulk-select"><option value="">不批量修改染色</option><option v-for="item in stains" :key="item">{{ item }}</option></select><SearchableSelect v-model="bulkCase" class="bulk-search-select" :options="bulkCaseOptions" search-placeholder="搜索 Case 编号或取材信息" /><button class="upload-apply-button" @click="applyBulk">应用到列表</button></div></div>
             <div class="mt-5 overflow-x-auto rounded-lg border border-white/[0.08]"><table class="w-full min-w-[1120px] text-sm"><thead class="bg-[#252730]"><tr><th>待导入项</th><th>大小</th><th>取材部位 *</th><th>取材方式 *</th><th>染色 *</th><th>绑定 Case</th><th>操作</th></tr></thead><tbody><tr v-if="!pending.length"><td colspan="7" class="h-32 text-center text-[#64748b]">请选择 WSI 文件或 DICOM 文件夹</td></tr><tr v-for="row in pending" v-else :key="row.id" class="border-t border-white/[0.06]"><td><div class="flex items-center gap-2"><span v-if="row.source==='dicom-series'" class="rounded bg-[#22d3ee]/10 px-2 py-1 text-xs text-[#67e8f9]">DICOM 序列</span><b>{{ row.fileName }}</b></div><small v-if="row.dicomPath" class="mt-1 block text-[#64748b]">{{ row.dicomPath }} · {{ row.dicomInstanceCount }} 个实例</small></td><td>{{ row.size }}</td><td><select v-model="row.site" class="row-select"><option value="">待选择</option><option v-for="item in PATHOLOGY_SITE_OPTIONS" :key="item.value" :value="item.value">{{ item.label }}</option></select></td><td><select v-model="row.samplingMethod" class="row-select"><option value="">待选择</option><option v-for="item in SAMPLING_METHOD_OPTIONS" :key="item.value" :value="item.value">{{ item.label }}</option></select></td><td><select v-model="row.stain" class="row-select"><option value="">待选择</option><option v-for="item in stains" :key="item">{{ item }}</option></select></td><td><select v-model="row.boundCase" class="row-select" @change="applyCase(row)"><option>未绑定</option><option v-for="item in cases" :key="item.id">{{ item.id }}</option></select></td><td><button class="text-[#ff9c9c]" @click="pending=pending.filter(item=>item.id!==row.id)">移除</button></td></tr></tbody></table></div>
           </div>
-          <footer class="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.08] px-5 py-4"><span class="text-sm text-[#94a3b8]">已选择 {{ pending.length }} 个导入项，其中 {{ incomplete }} 项信息待补充。</span><div class="flex gap-2"><button class="btn-secondary" @click="closeUpload">取消</button><button :disabled="!canImport" class="btn-primary disabled:opacity-40" @click="confirmImport"><Upload :size="16" />开始导入（{{ pending.length }}）</button></div></footer>
+          <footer class="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.08] px-5 py-4"><span class="text-sm text-[#94a3b8]">已选择 {{ pending.length }} 个导入项，其中 {{ incomplete }} 项信息待补充。</span><div class="flex gap-2"><button class="upload-cancel-button" @click="closeUpload">取消</button><button :disabled="!canImport" class="btn-primary disabled:opacity-40" @click="confirmImport"><Upload :size="16" />开始导入（{{ pending.length }}）</button></div></footer>
         </section>
       </div>
     </Teleport>
@@ -221,4 +212,8 @@ onMounted(() => {
 th, td { padding: 11px 12px; text-align: left; } th { color: #cbd5e1; font-weight: 600; } .icon-button { display:grid;width:34px;height:34px;place-items:center;color:#94a3b8; }
 .nav-arrow { position:absolute; top:50%; display:grid; width:42px;height:42px;place-items:center;transform:translateY(-50%);border-radius:50%;background:rgb(32 33 38 / .9);color:white; }.nav-arrow:disabled{opacity:.25}.scope{display:flex;gap:10px;border:1px solid rgb(255 255 255 / .08);border-radius:6px;padding:12px;color:#cbd5e1;font-size:14px}
 .upload-choice{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;border-width:1px;border-radius:8px;padding:16px;text-align:left}.upload-choice small{display:block;margin-top:3px;color:#748095;font-size:12px}.choice-icon{display:grid;width:42px;height:42px;place-items:center;border-radius:8px;background:rgb(255 255 255 / .04)}.choice-action{border:1px solid rgb(143 53 183 / .45);border-radius:6px;padding:7px 10px;color:#d292f4;font-size:12px}.row-select{width:100%;height:34px;border:1px solid rgb(255 255 255 / .09);border-radius:5px;background:#17181d;padding:0 8px;color:#cbd5e1}
+.upload-bulk-select{min-width:0;width:100%;height:40px;border:1px solid rgb(255 255 255 / .09);border-radius:6px;background:#202228;padding:0 30px 0 11px;color:#cbd5e1;font-size:13px;outline:none;transition:border-color .15s ease,box-shadow .15s ease}.upload-bulk-select:hover{border-color:rgb(255 255 255 / .16)}.upload-bulk-select:focus{border-color:rgb(143 53 183 / .62);box-shadow:0 0 0 2px rgb(143 53 183 / .14)}
+:deep(.bulk-search-select > button){border-radius:6px;color:#cbd5e1;font-size:13px;transition:border-color .15s ease,box-shadow .15s ease}:deep(.bulk-search-select > button:hover){border-color:rgb(255 255 255 / .16)}:deep(.bulk-search-select > button:focus-visible){outline:none;border-color:rgb(143 53 183 / .62);box-shadow:0 0 0 2px rgb(143 53 183 / .14)}
+.upload-apply-button{display:inline-flex;height:40px;align-items:center;justify-content:center;border:1px solid rgb(143 53 183 / .34);border-radius:6px;background:rgb(143 53 183 / .10);padding:0 14px;color:#d292f4;font-size:13px;font-weight:500;white-space:nowrap;transition:border-color .15s ease,background .15s ease,color .15s ease}.upload-apply-button:hover{border-color:rgb(143 53 183 / .58);background:rgb(143 53 183 / .17);color:#e9c4f8}.upload-apply-button:focus{outline:none}.upload-apply-button:focus-visible{box-shadow:0 0 0 2px rgb(143 53 183 / .22)}
+.upload-cancel-button{height:40px;border:1px solid transparent;border-radius:6px;padding:0 15px;color:#94a3b8;font-size:13px;font-weight:500;transition:background .15s ease,color .15s ease}.upload-cancel-button:hover{background:rgb(255 255 255 / .06);color:#e2e8f0}.upload-cancel-button:focus{outline:none}.upload-cancel-button:focus-visible{box-shadow:0 0 0 2px rgb(143 53 183 / .22)}
 </style>

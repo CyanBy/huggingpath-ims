@@ -63,7 +63,7 @@ function createCase() {
 
 <template>
   <div class="min-h-[calc(100dvh-64px)] px-4 py-5 lg:px-6">
-    <div v-if="route.query.from === 'wsi'" class="mb-4 flex items-center justify-between rounded-md border border-[#8f35b7]/30 bg-[#8f35b7]/10 px-4 py-3 text-sm"><span>已定位到 WSI 绑定的 Case，返回后原 WSI 选择仍会保留。</span><button class="text-[#d292f4]" @click="router.push('/workbench/wsi')">返回 WSI 管理</button></div>
+    <div v-if="route.query.from === 'wsi'" class="mb-4 flex items-center justify-between rounded-md border border-[#8f35b7]/30 bg-[#8f35b7]/10 px-4 py-3 text-sm"><span>已定位到当前 WSI 绑定的 Case。</span><button class="text-[#d292f4]" @click="router.push('/workbench/wsi')">返回 WSI 管理</button></div>
     <header class="mb-5 flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 class="text-2xl font-bold">Case 管理</h1>
