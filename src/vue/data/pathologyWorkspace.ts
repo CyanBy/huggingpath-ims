@@ -16,10 +16,15 @@ export type WorkspaceWsi = {
 
 export type WorkspaceCase = {
   id: string
+  patientCode: string
   site: string
   samplingMethod: string
-  ageGroup: string
+  age: number | null
   sex: '男' | '女' | '未知'
+  diagnosis: string
+  department: string
+  receivedAt: string
+  priority: '常规' | '加急'
   status: '就绪' | '处理中' | '异常' | '待处理'
   remark: string
 }
@@ -52,11 +57,11 @@ export const seedWsis: WorkspaceWsi[] = [
 ]
 
 export const seedCases: WorkspaceCase[] = [
-  { id: 'S-20260517-1906', site: 'lung', samplingMethod: 'biopsy', ageGroup: '41-60', sex: '女', status: '就绪', remark: '肺腺癌研究样本' },
-  { id: 'S-20260209-6099', site: 'kidney', samplingMethod: 'surgical', ageGroup: '19-40', sex: '男', status: '就绪', remark: '肾脏手术切除样本' },
-  { id: 'S-20260114-3036', site: 'colon', samplingMethod: 'surgical', ageGroup: '41-60', sex: '男', status: '处理中', remark: '结直肠癌手术标本' },
-  { id: 'S-20260402-9407', site: 'breast', samplingMethod: 'biopsy', ageGroup: '41-60', sex: '女', status: '待处理', remark: 'HER2 队列' },
-  { id: 'S-20251122-5123', site: 'stomach', samplingMethod: 'biopsy', ageGroup: '61+', sex: '男', status: '就绪', remark: '胃癌活检' },
+  { id: 'S-20260517-1906', patientCode: 'PT-1906', site: 'lung', samplingMethod: 'biopsy', age: 56, sex: '女', diagnosis: '疑似肺腺癌', department: '呼吸与危重症医学科', receivedAt: '2026-05-17', priority: '常规', status: '就绪', remark: '肺腺癌研究样本' },
+  { id: 'S-20260209-6099', patientCode: 'PT-6099', site: 'kidney', samplingMethod: 'surgical', age: 38, sex: '男', diagnosis: '肾占位性病变', department: '泌尿外科', receivedAt: '2026-02-09', priority: '常规', status: '就绪', remark: '肾脏手术切除样本' },
+  { id: 'S-20260114-3036', patientCode: 'PT-3036', site: 'colon', samplingMethod: 'surgical', age: 63, sex: '男', diagnosis: '结直肠腺癌', department: '胃肠外科', receivedAt: '2026-01-14', priority: '加急', status: '处理中', remark: '结直肠癌手术标本' },
+  { id: 'S-20260402-9407', patientCode: 'PT-9407', site: 'breast', samplingMethod: 'biopsy', age: 47, sex: '女', diagnosis: '乳腺浸润性癌待分型', department: '乳腺外科', receivedAt: '2026-04-02', priority: '常规', status: '待处理', remark: 'HER2 队列' },
+  { id: 'S-20251122-5123', patientCode: 'PT-5123', site: 'stomach', samplingMethod: 'biopsy', age: 68, sex: '男', diagnosis: '胃腺癌', department: '消化内科', receivedAt: '2025-11-22', priority: '常规', status: '就绪', remark: '胃癌活检' },
 ]
 
 export const seedProjects: WorkspaceProject[] = [
@@ -91,10 +96,33 @@ export function writeWorkspaceWsis(value: WorkspaceWsi[]) { writeValue(WSI_KEY, 
 
 export function readWorkspaceCases() {
   const deleted = readPathologyEntityDeletions().deletedCaseIds
-  return readValue(CASE_KEY, seedCases).filter((item) => !deleted.includes(item.id))
+  return readValue<WorkspaceCase & { ageGroup?: string }>(CASE_KEY, seedCases).filter((item) => !deleted.includes(item.id)).map((item): WorkspaceCase => ({
+    ...item,
+    patientCode: item.patientCode || `PT-${item.id.replace(/\D/g, '').slice(-4) || '0000'}`,
+    age: typeof item.age === 'number' ? item.age : item.ageGroup === '0-18' ? 16 : item.ageGroup === '19-40' ? 35 : item.ageGroup === '41-60' ? 52 : item.ageGroup === '61+' ? 68 : null,
+    diagnosis: item.diagnosis || item.remark || '待补充',
+    department: item.department || '未填写',
+    receivedAt: item.receivedAt || item.id.match(/S-(\d{4})(\d{2})(\d{2})/)?.slice(1).join('-') || new Date().toISOString().slice(0, 10),
+    priority: item.priority === '加急' ? '加急' : '常规',
+  }))
 }
 
 export function writeWorkspaceCases(value: WorkspaceCase[]) { writeValue(CASE_KEY, value) }
+
+export function createWorkspaceCase(value: WorkspaceCase) {
+  const cases = readWorkspaceCases()
+  if (cases.some((item) => item.id.toLowerCase() === value.id.toLowerCase())) throw new Error('Case 编号已存在。')
+  writeWorkspaceCases([value, ...cases])
+  return value
+}
+
+export function upsertWorkspaceWsi(value: WorkspaceWsi) {
+  const wsis = readWorkspaceWsis()
+  const index = wsis.findIndex((item) => item.id === value.id)
+  if (index >= 0) wsis[index] = value
+  else wsis.unshift(value)
+  writeWorkspaceWsis(wsis)
+}
 
 export function readWorkspaceProjects() {
   const deleted = readPathologyEntityDeletions().deletedProjectIds

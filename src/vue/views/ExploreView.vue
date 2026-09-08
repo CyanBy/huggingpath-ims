@@ -46,7 +46,7 @@ onUnmounted(() => window.removeEventListener('pointerdown', closeMenus))
           <div><h2 class="font-semibold group-hover:text-[#d292f4]">{{ model.name }}</h2><code class="mt-1 block text-xs text-[#64748b]">{{ model.id }}</code></div>
           <p :class="['text-sm leading-6', viewMode === 'card' && 'mt-4 min-h-12']">{{ model.summary }}</p>
           <div :class="['flex items-center gap-3', viewMode === 'card' ? 'mt-5 border-t border-white/[0.06] pt-4' : 'justify-end']">
-            <button class="btn-secondary h-9" @click="router.push(`/model/${encodeURIComponent(model.id)}`)"><Eye :size="14" />查看详情</button>
+            <button class="btn-ghost h-9" @click="router.push(`/model/${encodeURIComponent(model.id)}`)"><Eye :size="14" />查看详情</button>
             <div class="relative" data-run-menu>
               <button class="btn-primary h-9" @click="runMenuModelId = runMenuModelId === model.id ? null : model.id"><Play :size="14" />运行模型</button>
               <div v-if="runMenuModelId === model.id" class="absolute right-0 top-full z-30 mt-2 w-[292px] rounded-lg border border-white/[0.10] bg-[#202126] p-1.5 shadow-2xl">

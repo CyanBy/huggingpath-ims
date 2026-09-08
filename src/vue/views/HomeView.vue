@@ -62,7 +62,7 @@ const communityStats = [[String(MODEL_CATALOG.length), '开源模型'], ['12', '
             {icon:Layers,title:'多层结果查看',text:'真实标注与模型输出可以独立开关、调节透明度。'},
             {icon:SlidersHorizontal,title:'精细运行控制',text:'按切片停止、重新分析，并查看每个模型的独立进度。'},
             {icon:Workflow,title:'任务统一追踪',text:'从不同数据入口创建的任务进入同一队列和工作台。'},
-            {icon:Database,title:'数据关系保留',text:'在 WSI、Case 与项目之间跳转时保留选择和来源上下文。'},
+            {icon:Database,title:'数据关系清晰',text:'在 WSI、Case 与项目之间保留数据关联和来源上下文，页面临时勾选离开后自动清空。'},
           ]" :key="item.title" class="border-l border-[#8f35b7]/45 pl-4"><component :is="item.icon" :size="18" class="text-[#d292f4]" /><h3 class="mt-3 font-semibold">{{ item.title }}</h3><p class="mt-2 text-sm leading-6">{{ item.text }}</p></article>
         </div>
       </div>

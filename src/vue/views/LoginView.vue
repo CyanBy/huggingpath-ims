@@ -108,8 +108,8 @@ function submitRegister() {
           <h1 class="text-xl font-semibold">登录账号</h1><p class="mt-1.5 text-sm">继续访问你的工作台和机构数据。</p>
           <div v-if="session" class="mt-5 flex items-center justify-between rounded-md border border-white/[0.08] bg-[#14151a] px-3 py-2.5 text-sm"><span class="truncate text-[#94a3b8]">当前登录：{{ session.account.displayName }}</span><button type="button" class="text-[#d292f4]" @click="router.replace(destination)">继续使用</button></div>
           <div class="mt-6 space-y-4">
-            <label class="field"><span>账号或邮箱</span><div class="field-control"><User :size="16" /><input v-model="loginAccount" autocomplete="username" placeholder="请输入账号或邮箱" /></div></label>
-            <label class="field"><span class="flex justify-between">密码 <small>密码重置请联系管理员</small></span><div class="field-control"><LockKeyhole :size="16" /><input v-model="loginPassword" :type="showPassword ? 'text' : 'password'" autocomplete="current-password" placeholder="请输入密码" /><button type="button" @click="showPassword = !showPassword"><EyeOff v-if="showPassword" :size="16" /><Eye v-else :size="16" /></button></div></label>
+            <label class="field"><span>账号或邮箱 <i class="required-mark">*</i></span><div class="field-control"><User :size="16" /><input v-model="loginAccount" required autocomplete="username" placeholder="请输入账号或邮箱" /></div></label>
+            <label class="field"><span class="flex justify-between"><span>密码 <i class="required-mark">*</i></span><small>密码重置请联系管理员</small></span><div class="field-control"><LockKeyhole :size="16" /><input v-model="loginPassword" required :type="showPassword ? 'text' : 'password'" autocomplete="current-password" placeholder="请输入密码" /><button type="button" @click="showPassword = !showPassword"><EyeOff v-if="showPassword" :size="16" /><Eye v-else :size="16" /></button></div></label>
           </div>
           <p v-if="error" class="mt-4 rounded-md border border-[#8e3942] bg-[#361b20] px-3 py-2.5 text-sm text-[#fda4af]">{{ error }}</p>
           <button class="btn-primary mt-6 h-11 w-full" type="submit">登录 <ArrowRight :size="16" /></button>
@@ -119,10 +119,10 @@ function submitRegister() {
         <form v-else @submit.prevent="submitRegister">
           <h1 class="text-xl font-semibold">创建个人账号</h1><p class="mt-1.5 text-sm">机构关系在注册后通过申请建立。</p>
           <div class="mt-6 space-y-4">
-            <label class="field"><span>用户名</span><div class="field-control"><User :size="16" /><input v-model="registerName" autocomplete="username" placeholder="用于登录和个人标识" /></div></label>
-            <label class="field"><span>邮箱</span><div class="field-control"><Mail :size="16" /><input v-model="registerEmail" type="email" autocomplete="email" placeholder="example@domain.com" /></div></label>
-            <label class="field"><span>密码</span><div class="field-control"><LockKeyhole :size="16" /><input v-model="registerPassword" type="password" autocomplete="new-password" placeholder="至少 8 位" /></div></label>
-            <label class="field"><span>确认密码</span><div class="field-control"><ShieldCheck :size="16" /><input v-model="confirmPassword" type="password" autocomplete="new-password" placeholder="再次输入密码" /></div></label>
+            <label class="field"><span>用户名 <i class="required-mark">*</i></span><div class="field-control"><User :size="16" /><input v-model="registerName" required autocomplete="username" placeholder="用于登录和个人标识" /></div></label>
+            <label class="field"><span>邮箱 <i class="required-mark">*</i></span><div class="field-control"><Mail :size="16" /><input v-model="registerEmail" required type="email" autocomplete="email" placeholder="example@domain.com" /></div></label>
+            <label class="field"><span>密码 <i class="required-mark">*</i></span><div class="field-control"><LockKeyhole :size="16" /><input v-model="registerPassword" required type="password" autocomplete="new-password" placeholder="至少 8 位" /></div></label>
+            <label class="field"><span>确认密码 <i class="required-mark">*</i></span><div class="field-control"><ShieldCheck :size="16" /><input v-model="confirmPassword" required type="password" autocomplete="new-password" placeholder="再次输入密码" /></div></label>
           </div>
           <p v-if="error" class="mt-4 rounded-md border border-[#8e3942] bg-[#361b20] px-3 py-2.5 text-sm text-[#fda4af]">{{ error }}</p>
           <button class="btn-primary mt-6 h-11 w-full" type="submit"><ShieldCheck :size="16" />创建账号</button>

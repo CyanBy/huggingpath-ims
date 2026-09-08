@@ -9,7 +9,6 @@ import {
   ChevronRight,
   CircleHelp,
   Columns2,
-  FileText,
   Grid3X3,
   Info,
   LayoutGrid,
@@ -23,10 +22,7 @@ import {
   ScanSearch,
   Search,
   Settings,
-  SlidersHorizontal,
   Square,
-  Tags,
-  Table2,
   Trash2,
   Undo2,
   Unlink2,
@@ -52,6 +48,8 @@ import {
   type AnalysisTaskStatus,
 } from '@/lib/analysisTasks'
 import { useAnalysisTasks } from '../composables/useAnalysisTasks'
+import { useWorkspaceData } from '../composables/useWorkspaceData'
+import { getPathologySiteLabel, getSamplingMethodLabel } from '@/lib/pathologySpecimens'
 import TmeFeatureAnalysisModal from '../components/TmeFeatureAnalysisModal.vue'
 import {
   getSparkSlideSummary,
@@ -60,32 +58,29 @@ import {
   type SparkFeatureDefinition,
 } from '../data/sparkFeatures'
 
-type WorkspaceMode = 'browse' | 'compare'
-type ResultTab = 'quantitative' | 'features' | 'report'
-type CompareTab = 'heatmap' | 'distribution' | 'table'
+type ResultTab = 'quantitative' | 'features'
 type ViewerLayout = '1x1' | '1x2' | '2x2'
-type ViewerPanel = 'help' | 'settings' | 'info' | 'annotations' | null
+type ViewerPanel = 'help' | 'settings' | 'info' | null
 type InfoPanelTab = 'metadata' | 'labels'
 type CountType = 'positive' | 'negative'
 type Point = { x: number; y: number }
 type RoiRect = { x: number; y: number; width: number; height: number }
 type HeatmapCell = { x: number; y: number; value: number }
 type CountMarker = { id: number; x: number; y: number; type: CountType }
-type AnnotationLabel = { id: string; name: string; color: string; visible: boolean }
+type AnnotationLabel = { id: string; name: string; color: string; visible: boolean; opacity: number; count: number }
 type NucleusAnnotation = { id: number; x: number; y: number; labelId: string }
 type RegionAnnotation = { id: number; x: number; y: number; width: number; height: number; rotate: number; labelId: string }
 
 const route = useRoute()
 const router = useRouter()
 const { tasks, refresh } = useAnalysisTasks(true)
+const { cases } = useWorkspaceData()
 const taskId = computed(() => String(route.params.taskId || ''))
 const task = computed(() => tasks.value.find((item) => item.id === taskId.value) || null)
 
 const selectedId = ref('')
 const search = ref('')
-const workspaceMode = ref<WorkspaceMode>('browse')
 const resultTab = ref<ResultTab>('quantitative')
-const compareTab = ref<CompareTab>('heatmap')
 const zoom = ref(20)
 const viewerFrame = ref<HTMLElement | null>(null)
 const slideStage = ref<HTMLElement | null>(null)
@@ -102,9 +97,11 @@ const countMode = ref(false)
 const countType = ref<CountType>('positive')
 const countMarkersByObject = ref<Record<string, CountMarker[]>>({})
 const markerSequence = ref(0)
-const showNuclei = ref(false)
-const showTissueRegions = ref(false)
-const annotationOpacity = ref(82)
+const showNuclei = ref(true)
+const showTissueRegions = ref(true)
+const annotationOpacity = ref(100)
+const nucleusOpacity = ref(100)
+const regionOpacity = ref(100)
 const showFeatureLayer = ref(false)
 const opacity = ref(70)
 const smoothNavigation = ref(true)
@@ -121,35 +118,35 @@ const featureCategory = ref('全部类别')
 const featureSearch = ref('')
 const selectedFeatureId = ref('spark-1')
 const activeResultModelId = ref('')
-const generatedReportModelIds = ref<string[]>([])
 const fileNameTip = ref<{ text: string; x: number; y: number } | null>(null)
 const fileNameTipElement = ref<HTMLElement | null>(null)
 const showTmeFeatureAnalysis = ref(false)
+const caseInfoExpanded = ref(true)
 
 const zoomLevels = [0.5, 1, 4, 10, 20, 40, 80]
 const slidePixelSize = { width: 22200, height: 29670 }
 const nucleusLabels = ref<AnnotationLabel[]>([
-  { id: 'exclude', name: 'Exclude', color: '#111827', visible: true },
-  { id: 'cancer', name: 'Cancer nucleus', color: '#ef4444', visible: true },
-  { id: 'stromal', name: 'Stromal nucleus', color: '#22c55e', visible: true },
-  { id: 'large-stromal', name: 'Large stromal nucleus', color: '#b7ef16', visible: true },
-  { id: 'lymphocyte', name: 'Lymphocyte nucleus', color: '#3847e8', visible: true },
-  { id: 'plasma', name: 'Plasma cell / large TIL nucleus', color: '#4bdfe8', visible: true },
-  { id: 'normal-epithelial', name: 'Normal epithelial nucleus', color: '#3575a8', visible: true },
-  { id: 'other', name: 'Other nucleus', color: '#98958a', visible: true },
-  { id: 'ambiguous', name: 'Unknown/Ambiguous nucleus', color: '#4b5563', visible: true },
-  { id: 'background', name: 'Background (non-nuclear material)', color: '#e5e7eb', visible: true },
+  { id: 'exclude', name: 'Exclude', color: '#111827', visible: true, opacity: 100, count: 18557 },
+  { id: 'cancer', name: 'Cancer nucleus', color: '#ef4444', visible: true, opacity: 100, count: 1052 },
+  { id: 'stromal', name: 'Stromal nucleus', color: '#22c55e', visible: true, opacity: 100, count: 674 },
+  { id: 'large-stromal', name: 'Large stromal nucleus', color: '#b7ef16', visible: true, opacity: 100, count: 5067 },
+  { id: 'lymphocyte', name: 'Lymphocyte nucleus', color: '#3847e8', visible: true, opacity: 100, count: 2359 },
+  { id: 'plasma', name: 'Plasma cell / large TIL nucleus', color: '#4bdfe8', visible: true, opacity: 100, count: 19 },
+  { id: 'normal-epithelial', name: 'Normal epithelial nucleus', color: '#3575a8', visible: true, opacity: 100, count: 18557 },
+  { id: 'other', name: 'Other nucleus', color: '#98958a', visible: true, opacity: 100, count: 18557 },
+  { id: 'ambiguous', name: 'Unknown/Ambiguous nucleus', color: '#4b5563', visible: true, opacity: 100, count: 9386 },
+  { id: 'background', name: 'Background (non-nuclear material)', color: '#e5e7eb', visible: true, opacity: 100, count: 18557 },
 ])
 const regionLabels = ref<AnnotationLabel[]>([
-  { id: 'exclude', name: 'Exclude', color: '#111827', visible: true },
-  { id: 'cancerous-epithelium', name: 'Cancerous epithelium', color: '#c038ed', visible: true },
-  { id: 'stroma', name: 'Stroma', color: '#e7b4ee', visible: true },
-  { id: 'tils', name: 'TILs', color: '#697bd4', visible: true },
-  { id: 'normal-epithelium', name: 'Normal epithelium', color: '#e766bf', visible: true },
-  { id: 'junk', name: 'Junk/Debris', color: '#f0f691', visible: true },
-  { id: 'blood', name: 'Blood', color: '#9c5a10', visible: true },
-  { id: 'other', name: 'Other', color: '#c9c9c9', visible: true },
-  { id: 'whitespace', name: 'Whitespace/Empty', color: '#f3f4f6', visible: true },
+  { id: 'exclude', name: 'Exclude', color: '#111827', visible: true, opacity: 100, count: 1514 },
+  { id: 'cancerous-epithelium', name: 'Cancerous epithelium', color: '#c038ed', visible: true, opacity: 100, count: 558 },
+  { id: 'stroma', name: 'Stroma', color: '#e7b4ee', visible: true, opacity: 100, count: 3244 },
+  { id: 'tils', name: 'TILs', color: '#697bd4', visible: true, opacity: 100, count: 2 },
+  { id: 'normal-epithelium', name: 'Normal epithelium', color: '#e766bf', visible: true, opacity: 100, count: 1514 },
+  { id: 'junk', name: 'Junk/Debris', color: '#f0f691', visible: true, opacity: 100, count: 1514 },
+  { id: 'blood', name: 'Blood', color: '#9c5a10', visible: true, opacity: 100, count: 1514 },
+  { id: 'other', name: 'Other', color: '#c9c9c9', visible: true, opacity: 100, count: 1514 },
+  { id: 'whitespace', name: 'Whitespace/Empty', color: '#f3f4f6', visible: true, opacity: 100, count: 1514 },
 ])
 const nucleusAnnotations: NucleusAnnotation[] = Array.from({ length: 88 }, (_, index) => ({
   id: index,
@@ -171,12 +168,6 @@ const heatmapMask = [
   [2, 3, 4, 5], [2, 3, 4, 5], [2, 3, 4, 5], [1, 2, 3, 4, 5],
 ]
 const tmeFeatures = SPARK_FEATURES
-const tissueComposition = [
-  { name: 'Stroma', value: '34.5 mm²', percent: 88, color: '#d792e7' },
-  { name: 'TILS', value: '4.0 mm²', percent: 10, color: '#818cf8' },
-  { name: 'Cancerous epithelium', value: '0.3 mm²', percent: 1, color: '#c84ed8' },
-  { name: 'Junk / Debris', value: '0.1 mm²', percent: 1, color: '#e9f78a' },
-]
 const nucleiComposition = [
   { name: 'Stromal nucleus', value: '108,409', percent: 66 },
   { name: 'Lymphocyte nucleus', value: '41,447', percent: 23 },
@@ -184,14 +175,12 @@ const nucleiComposition = [
   { name: 'Plasma cell nucleus', value: '1,892', percent: 2 },
   { name: 'Cancer nucleus', value: '1,211', percent: 1 },
 ]
-const comparisonValues = [
-  [0.18, 0.36, 0.28, 0.72, 0.55, 0.22, 0.67, 0.44],
-  [0.34, 0.62, 0.31, 0.47, 0.21, 0.41, 0.28, 0.76],
-  [0.24, 0.52, 0.79, 0.33, 0.68, 0.19, 0.47, 0.36],
-  [0.45, 0.28, 0.42, 0.63, 0.38, 0.74, 0.32, 0.56],
-]
-
 const selectedObject = computed(() => task.value?.objects.find((item) => item.id === selectedId.value) || task.value?.objects[0] || null)
+const selectedCase = computed(() => {
+  const id = selectedObject.value?.caseId || selectedObject.value?.caseName
+  return id ? cases.value.find((item) => item.id === id) || null : null
+})
+const showCaseContext = computed(() => task.value?.objectType === 'Case' && Boolean(selectedCase.value))
 const selectedObjectIndex = computed(() => task.value?.objects.findIndex((item) => item.id === selectedObject.value?.id) ?? -1)
 const sparkSummary = computed(() => getSparkSlideSummary(selectedObjectIndex.value))
 const activeCountMarkers = computed(() => countMarkersByObject.value[selectedObject.value?.id || ''] || [])
@@ -199,14 +188,14 @@ const visibleNucleusAnnotations = computed(() => {
   const labels = new Map(nucleusLabels.value.filter((label) => label.visible).map((label) => [label.id, label]))
   return nucleusAnnotations.flatMap((annotation) => {
     const label = labels.get(annotation.labelId)
-    return label ? [{ ...annotation, color: label.color, name: label.name }] : []
+    return label ? [{ ...annotation, color: colorWithOpacity(label.color, (label.opacity / 100) * (nucleusOpacity.value / 100)), name: label.name }] : []
   })
 })
 const visibleRegionAnnotations = computed(() => {
   const labels = new Map(regionLabels.value.filter((label) => label.visible).map((label) => [label.id, label]))
   return regionAnnotations.flatMap((annotation) => {
     const label = labels.get(annotation.labelId)
-    return label ? [{ ...annotation, color: label.color, name: label.name }] : []
+    return label ? [{ ...annotation, color: colorWithOpacity(label.color, (label.opacity / 100) * (regionOpacity.value / 100)), name: label.name }] : []
   })
 })
 const annotationLayerVisible = computed(() => showNuclei.value || showTissueRegions.value)
@@ -223,7 +212,6 @@ const splitPaneObjects = computed(() => {
 const runs = computed(() => task.value && selectedObject.value ? getObjectRuns(task.value, selectedObject.value.id) : [])
 const activeResultRun = computed(() => runs.value.find((run) => run.modelId === activeResultModelId.value) || runs.value[0] || null)
 const isTmeResult = computed(() => activeResultRun.value?.modelId === 'mod-tme')
-const reportGenerated = computed(() => Boolean(activeResultRun.value && generatedReportModelIds.value.includes(activeResultRun.value.modelId)))
 const modelSelectionLocked = computed(() => Boolean(task.value?.modelLocked || selectedObject.value?.status !== '待分析'))
 const visibleAnalysisModels = computed(() => {
   if (!selectedObject.value || !modelSelectionLocked.value) return AVAILABLE_ANALYSIS_MODELS
@@ -262,15 +250,6 @@ const taskProgress = computed(() => {
   return Math.round(task.value.models.reduce((total, run) => total + runProgress(run), 0) / task.value.models.length)
 })
 const viewerScale = computed(() => zoomScale(zoom.value))
-const comparisonRows = computed(() => {
-  return (task.value?.objects || []).map((item, index) => ({
-    id: item.id,
-    name: item.name,
-    meta: item.meta,
-    values: comparisonValues[index % comparisonValues.length],
-  }))
-})
-const compareFeatures = computed(() => tmeFeatures.slice(0, 8))
 
 watch(task, (value) => {
   if (!value) return
@@ -371,10 +350,6 @@ function selectResultModel(modelId: string) {
   resultTab.value = 'quantitative'
   showFeatureLayer.value = false
 }
-function generateReport() {
-  const modelId = activeResultRun.value?.modelId
-  if (modelId && !generatedReportModelIds.value.includes(modelId)) generatedReportModelIds.value.push(modelId)
-}
 function statusClass(status: AnalysisTaskStatus) {
   return { '待分析': 'border-[#8f35b7]/45 bg-[#8f35b7]/15 text-[#d292f4]', '排队中': 'border-[#8f35b7]/45 bg-[#8f35b7]/15 text-[#d292f4]', '正在分析': 'border-[#eab65b]/40 bg-[#eab65b]/10 text-[#f4c577]', '分析完成': 'border-[#84cc16]/35 bg-[#84cc16]/10 text-[#95d94e]', '失败': 'border-[#ff9c9c]/45 bg-[#ff9c9c]/10 text-[#ffb4b4]', '已停止': 'border-[#64748b]/45 bg-[#64748b]/10 text-[#cbd5e1]' }[status]
 }
@@ -405,13 +380,6 @@ function stopAll() {
   if (!task.value) return
   stopAnalysisTask(task.value.id)
   refresh()
-}
-function setWorkspaceMode(mode: WorkspaceMode) {
-  workspaceMode.value = mode
-  if (mode === 'browse') {
-    roiMode.value = false
-    resetViewer()
-  }
 }
 function selectObject(objectId: string) {
   if (viewerLayout.value !== '1x1') {
@@ -590,33 +558,15 @@ function onViewerKeydown(event: KeyboardEvent) {
 function selectFeature(feature: SparkFeatureDefinition) {
   selectedFeatureId.value = feature.id
   showFeatureLayer.value = feature.spatial
-  if (feature.spatial) workspaceMode.value = 'browse'
 }
 function toggleResultNuclei() {
-  workspaceMode.value = 'browse'
   showNuclei.value = !showNuclei.value
 }
 function toggleResultHeatmap() {
-  workspaceMode.value = 'browse'
   if (!activeFeature.value.spatial) {
     selectedFeatureId.value = tmeFeatures.find((feature) => feature.spatial)?.id || selectedFeatureId.value
   }
   showFeatureLayer.value = !showFeatureLayer.value
-}
-function toggleResultAnnotations() {
-  workspaceMode.value = 'browse'
-  viewerPanel.value = viewerPanel.value === 'annotations' ? null : 'annotations'
-}
-function selectComparisonRow(id: string) {
-  const object = task.value?.objects.find((item) => item.id === id)
-  if (object) selectedId.value = object.id
-}
-function heatColor(value: number) {
-  if (value >= 0.7) return '#9f342f'
-  if (value >= 0.55) return '#80652a'
-  if (value >= 0.4) return '#356447'
-  if (value >= 0.25) return '#376b31'
-  return '#1d344d'
 }
 function spatialHeatColor(value: number) {
   if (value >= 0.8) return '#e76f51'
@@ -626,26 +576,22 @@ function spatialHeatColor(value: number) {
   if (value >= 0.16) return '#3487a9'
   return '#3f5f9f'
 }
-function setAllAnnotationLabels(visible: boolean) {
-  nucleusLabels.value.forEach((label) => { label.visible = visible })
-  regionLabels.value.forEach((label) => { label.visible = visible })
+function toggleAllAnnotations() {
+  const visible = !annotationLayerVisible.value
   showNuclei.value = visible
   showTissueRegions.value = visible
 }
-function toggleAllAnnotations() {
-  setAllAnnotationLabels(!annotationLayerVisible.value)
+function annotationBarWidth(label: AnnotationLabel, labels: AnnotationLabel[]) {
+  const maxCount = Math.max(...labels.map((item) => item.count), 1)
+  return Math.max(2, Math.round((label.count / maxCount) * 100))
 }
-function setAnnotationGroup(group: 'nuclei' | 'regions', visible: boolean) {
-  if (group === 'nuclei') showNuclei.value = visible
-  else showTissueRegions.value = visible
-}
-function setGroupLabels(group: 'nuclei' | 'regions', visible: boolean) {
-  const labels = group === 'nuclei' ? nucleusLabels.value : regionLabels.value
-  labels.forEach((label) => { label.visible = visible })
-  setAnnotationGroup(group, visible)
-}
-function startAnnotationRoi() {
-  if (!roiMode.value) toggleRoiMode()
+function colorWithOpacity(color: string, opacity: number) {
+  const normalized = color.replace('#', '')
+  const value = Number.parseInt(normalized.length === 3 ? normalized.split('').map((item) => item + item).join('') : normalized, 16)
+  const red = (value >> 16) & 255
+  const green = (value >> 8) & 255
+  const blue = value & 255
+  return `rgb(${red} ${green} ${blue} / ${Math.max(0, Math.min(1, opacity))})`
 }
 async function toggleFullscreen() {
   if (!viewerFrame.value) return
@@ -661,6 +607,10 @@ async function toggleFullscreen() {
         <button class="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-[#8f35b7]/55 bg-[#8f35b7]/10 font-medium text-[#e8b8f8] hover:bg-[#8f35b7]/18" @click="router.push('/workbench/tasks')"><ArrowLeft :size="17" />返回分析任务列表</button>
         <div class="mt-3 flex items-start justify-between gap-3"><h1 class="min-w-0 truncate text-lg font-semibold">{{ getTaskDisplayName(task) }}</h1><span :class="['shrink-0 rounded-md border px-2 py-1 text-xs', statusClass(task.status)]">{{ task.status }}</span></div>
       </div>
+      <section v-if="showCaseContext && selectedCase" class="case-context">
+        <button class="case-context-toggle" :aria-expanded="caseInfoExpanded" @click="caseInfoExpanded=!caseInfoExpanded"><span><b>Case 信息</b><small>{{ selectedCase.id }}</small></span><ChevronDown :class="caseInfoExpanded&&'open'" :size="16" /></button>
+        <div v-if="caseInfoExpanded" class="case-context-body"><div><span>脱敏患者</span><b>{{ selectedCase.patientCode }}</b></div><div><span>年龄 / 性别</span><b>{{ selectedCase.age ?? '未知' }} / {{ selectedCase.sex }}</b></div><div><span>取材</span><b>{{ getPathologySiteLabel(selectedCase.site) }} · {{ getSamplingMethodLabel(selectedCase.samplingMethod) }}</b></div><div><span>收样日期</span><b>{{ selectedCase.receivedAt }}</b></div><div class="wide"><span>临床诊断</span><b>{{ selectedCase.diagnosis }}</b></div><button @click="router.push(`/workbench/cases/${selectedCase.id}`)">查看完整 Case 详情</button></div>
+      </section>
       <div class="border-b border-white/[0.08] p-3"><label class="flex h-10 items-center gap-2 rounded-md border border-white/[0.08] bg-[#17181d] px-3"><Search :size="16" class="text-[#64748b]" /><input v-model="search" class="w-full bg-transparent text-sm outline-none" placeholder="搜索 WSI / Case / 部位 / 染色" /></label></div>
       <div class="min-h-0 flex-1 space-y-2 overflow-y-auto p-3" @scroll.passive="hideFileName">
         <article v-for="item in filteredObjects" :key="item.id" :class="['rounded-lg border p-3 transition', selectedObject?.id === item.id ? 'border-[#8f35b7] bg-[#8f35b7]/7' : 'border-white/[0.08] bg-[#17181d] hover:border-white/[0.14]']" @click="selectObject(item.id)">
@@ -675,8 +625,6 @@ async function toggleFullscreen() {
     </aside>
 
     <main class="workbench-center">
-      <div class="workspace-mode-bar"><div class="segmented-control"><button :class="workspaceMode === 'browse' && 'active'" @click="setWorkspaceMode('browse')">WSI 浏览</button><button :class="workspaceMode === 'compare' && 'active'" @click="setWorkspaceMode('compare')">批次对比</button></div><span class="text-xs text-[#64748b]">{{ workspaceMode === 'browse' ? selectedObject?.name : `${comparisonRows.length} 张切片` }}</span></div>
-      <template v-if="workspaceMode === 'browse'">
         <div class="viewer-toolbar">
           <div class="viewer-toolbar-primary">
             <div class="viewer-toolbar-actions">
@@ -716,29 +664,13 @@ async function toggleFullscreen() {
             </div>
           </div>
         </div>
-        <section v-if="viewerPanel" :class="['viewer-flyout', viewerPanel === 'annotations' && 'annotation-flyout']">
+        <section v-if="viewerPanel" class="viewer-flyout">
           <header>
-            <div><b>{{ viewerPanel === 'help' ? '查看器帮助' : viewerPanel === 'settings' ? '查看器设置' : viewerPanel === 'annotations' ? '标注图层' : '切片信息' }}</b><small>{{ viewerPanel === 'help' ? '常用操作与快捷键' : viewerPanel === 'settings' ? '当前浏览会话设置' : viewerPanel === 'annotations' ? '控制模型输出的分类图层' : '像素、扫描与标签信息' }}</small></div>
+            <div><b>{{ viewerPanel === 'help' ? '查看器帮助' : viewerPanel === 'settings' ? '查看器设置' : '切片信息' }}</b><small>{{ viewerPanel === 'help' ? '常用操作与快捷键' : viewerPanel === 'settings' ? '当前浏览会话设置' : '像素、扫描与标签信息' }}</small></div>
             <button title="关闭" @click="viewerPanel = null"><X :size="16" /></button>
           </header>
           <div v-if="viewerPanel === 'help'" class="viewer-help-content"><dl><div><dt>拖动 / 滚轮</dt><dd>平移切片 / 调整倍率</dd></div><div><dt>← / →</dt><dd>上一张 / 下一张 WSI</dd></div><div><dt>Shift + S</dt><dd>切换放大镜</dd></div><div><dt>K</dt><dd>切换细胞计数</dd></div><div><dt>F</dt><dd>适应当前视图</dd></div><div><dt>Esc</dt><dd>关闭面板</dd></div></dl></div>
           <div v-else-if="viewerPanel === 'settings'" class="viewer-settings-content"><label><span>平滑缩放与平移</span><input v-model="smoothNavigation" type="checkbox" /></label><label class="viewer-setting-range"><span>放大镜倍数 <b>{{ magnifierZoom }}X</b></span><input v-model="magnifierZoom" type="range" min="2" max="6" /></label><label class="viewer-setting-range"><span>结果图层透明度 <b>{{ opacity }}%</b></span><input v-model="opacity" type="range" min="0" max="100" /></label></div>
-          <div v-else-if="viewerPanel === 'annotations'" class="annotation-panel">
-            <button :class="['annotation-master', annotationLayerVisible && 'active']" @click="toggleAllAnnotations">标注{{ annotationLayerVisible ? '已显示' : '已隐藏' }}</button>
-            <label class="annotation-opacity"><span>透明度</span><input v-model="annotationOpacity" type="range" min="0" max="100" /><b>{{ annotationOpacity }}%</b></label>
-            <div class="annotation-global-actions"><button @click="setAllAnnotationLabels(true)">全部显示</button><button @click="setAllAnnotationLabels(false)">全部隐藏</button></div>
-            <section class="annotation-quant"><header><div><b>区域定量</b><small>细胞核面积/总计数 · 组织级 ROI 边界统计</small></div><em>FGB 几何 · 演示</em></header><button :class="roiMode && 'active'" @click="startAnnotationRoi"><Square :size="13" />{{ roiMode ? '请在切片上框选区域' : '框选区域定量' }}</button></section>
-            <section class="annotation-group">
-              <header><b>细胞核</b><button @click="showNuclei = !showNuclei">{{ showNuclei ? '隐藏' : '显示' }}</button></header>
-              <div class="annotation-group-actions"><button @click="setGroupLabels('nuclei', true)">本层全显</button><button @click="setGroupLabels('nuclei', false)">本层全隐</button></div>
-              <div class="annotation-label-list"><label v-for="label in nucleusLabels" :key="label.id"><input v-model="label.visible" type="checkbox" /><input v-model="label.color" type="color" :aria-label="`${label.name}颜色`" /><span :title="label.name">{{ label.name }}</span><i :style="{ background: label.color }" /><em>数量</em></label></div>
-            </section>
-            <section class="annotation-group">
-              <header><b>组织区域</b><button @click="showTissueRegions = !showTissueRegions">{{ showTissueRegions ? '隐藏' : '显示' }}</button></header>
-              <div class="annotation-group-actions"><button @click="setGroupLabels('regions', true)">本层全显</button><button @click="setGroupLabels('regions', false)">本层全隐</button></div>
-              <div class="annotation-label-list"><label v-for="label in regionLabels" :key="label.id"><input v-model="label.visible" type="checkbox" /><input v-model="label.color" type="color" :aria-label="`${label.name}颜色`" /><span :title="label.name">{{ label.name }}</span><i :style="{ background: label.color }" /><em>区域</em></label></div>
-            </section>
-          </div>
           <div v-else class="viewer-info-content">
             <div class="viewer-info-tabs"><button :class="infoPanelTab === 'metadata' && 'active'" @click="infoPanelTab = 'metadata'">像素 / 扫描</button><button :class="infoPanelTab === 'labels' && 'active'" @click="infoPanelTab = 'labels'">标签 / 宏观图</button></div>
             <div v-if="infoPanelTab === 'metadata'" class="viewer-metadata">
@@ -761,17 +693,6 @@ async function toggleFullscreen() {
           <div v-if="showFeatureLayer" class="heatmap-legend"><div><span>{{ activeFeature.name }}</span><b>示例空间结果</b></div><i /><div class="heatmap-legend-scale"><span>低</span><span>高</span></div></div><div class="viewer-minimap"><img src="/wsi-cmu-region.jpg" alt="切片导航图" draggable="false" /><span :style="{ width: `${Math.max(24, 68 / viewerScale)}%`, height: `${Math.max(20, 58 / viewerScale)}%` }" /></div>
         </div>
         <div v-else ref="viewerFrame" :class="['viewer-frame', 'split-viewer', `layout-${viewerLayout}`]" @wheel.prevent="onViewerWheel"><button v-for="(paneObject, index) in splitPaneObjects" :key="`${paneObject?.id}-${index}`" :class="['split-pane', activeSplitPane === index && 'active']" @click="selectSplitPane(index, paneObject?.id)"><header><span><b>{{ index + 1 }}</b>{{ paneObject?.name }}</span><em v-if="activeSplitPane === index">当前结果</em></header><div class="split-pane-body"><div class="split-slide-stage" :style="{ transform: `scale(${splitPaneScale(index)})` }"><img src="/wsi-cmu-region.jpg" alt="公开病理示例切片" draggable="false" /><div v-if="showTissueRegions" class="region-annotation-layer" :style="{ opacity: annotationOpacity / 100 }"><i v-for="region in visibleRegionAnnotations" :key="region.id" :style="{ left: `${region.x}%`, top: `${region.y}%`, width: `${region.width}%`, height: `${region.height}%`, background: region.color, transform: `rotate(${region.rotate}deg)` }" /></div><div v-if="showFeatureLayer && activeFeature.spatial" class="feature-heatmap-layer" :style="{ opacity: opacity / 100 }"><i v-for="(cell, cellIndex) in spatialHeatmapCells" :key="cellIndex" :style="{ left: `${cell.x}%`, top: `${cell.y}%`, background: spatialHeatColor(cell.value) }" /></div><div v-if="showNuclei" class="nuclei-layer" :style="{ opacity: annotationOpacity / 100 }"><i v-for="annotation in visibleNucleusAnnotations" :key="annotation.id" :style="{ left: `${annotation.x}%`, top: `${annotation.y}%`, background: annotation.color }" /></div></div></div><footer><span>{{ paneObject?.meta }}</span><span>{{ zoom }}X</span></footer></button></div>
-      </template>
-      <template v-else>
-        <section class="comparison-panel">
-          <header class="comparison-header"><div><h2>批次特征对比</h2><p>当前任务中的 WSI 特征结果</p></div><span>{{ comparisonRows.length }} 张切片 · {{ compareFeatures.length }} 个已选特征</span></header>
-          <div class="comparison-tabs"><button :class="compareTab === 'heatmap' && 'active'" @click="compareTab = 'heatmap'"><Grid3X3 :size="15" />汇总热力图</button><button :class="compareTab === 'distribution' && 'active'" @click="compareTab = 'distribution'"><BarChart3 :size="15" />统计分布</button><button :class="compareTab === 'table' && 'active'" @click="compareTab = 'table'"><Table2 :size="15" />完整特征表</button></div>
-          <div class="comparison-filters"><button class="filter-button"><SlidersHorizontal :size="14" />全部类别</button><label><Search :size="15" /><input placeholder="搜索特征名称" /></label></div>
-          <div v-if="compareTab === 'heatmap'" class="heatmap-scroll"><table class="heatmap-table"><thead><tr><th>WSI</th><th v-for="feature in compareFeatures" :key="feature.id" :title="feature.name">{{ feature.name }}</th></tr></thead><tbody><tr v-for="row in comparisonRows" :key="row.id" @click="selectComparisonRow(row.id)"><th><b>{{ row.name }}</b><small>{{ row.meta }}</small></th><td v-for="(value, index) in row.values" :key="index" :style="{ background: heatColor(value) }"><span>{{ value.toFixed(3) }}</span></td></tr></tbody></table></div>
-          <div v-else-if="compareTab === 'distribution'" class="distribution-list"><article v-for="(feature, index) in compareFeatures.slice(0, 6)" :key="feature.id"><div><b>{{ feature.name }}</b><span>{{ feature.category }}</span></div><div class="distribution-track"><i v-for="row in comparisonRows" :key="row.id" :style="{ left: `${row.values[index] * 88 + 6}%` }" :title="`${row.name}: ${row.values[index].toFixed(3)}`" /></div></article></div>
-          <div v-else class="feature-table-scroll"><table class="feature-table"><thead><tr><th>WSI</th><th v-for="feature in tmeFeatures" :key="feature.id">{{ feature.name }}</th></tr></thead><tbody><tr v-for="row in comparisonRows" :key="row.id"><th>{{ row.name }}</th><td v-for="(feature, index) in tmeFeatures" :key="feature.id">{{ (row.values[index % row.values.length] * (index + 1)).toFixed(3) }}</td></tr></tbody></table></div>
-        </section>
-      </template>
     </main>
 
     <aside class="workbench-results">
@@ -779,12 +700,34 @@ async function toggleFullscreen() {
       <nav v-if="runs.length > 1" class="result-model-switcher" aria-label="分析结果模型"><button v-for="run in runs" :key="run.id" :class="activeResultRun?.modelId === run.modelId && 'active'" @click="selectResultModel(run.modelId)"><span>{{ run.name }}</span><small>{{ run.status }} · {{ runProgress(run) }}%</small></button></nav>
       <div v-if="!activeResultRun" class="results-empty"><BarChart3 :size="24" /><b>尚未选择分析模型</b><p>在左侧为当前 WSI 选择模型后，这里会分别显示各模型结果。</p></div>
       <template v-else>
-        <nav class="result-tabs"><button :class="resultTab === 'quantitative' && 'active'" @click="resultTab = 'quantitative'">{{ isTmeResult ? 'TME 概览' : '检测概览' }}</button><button :class="resultTab === 'features' && 'active'" @click="resultTab = 'features'">{{ isTmeResult ? '特征概览' : '细胞分类' }}</button><button :class="resultTab === 'report' && 'active'" @click="resultTab = 'report'">报告-Agent</button></nav>
+        <nav class="result-tabs two-tabs"><button :class="resultTab === 'quantitative' && 'active'" @click="resultTab = 'quantitative'">{{ isTmeResult ? 'TME 定量' : '检测概览' }}</button><button :class="resultTab === 'features' && 'active'" @click="resultTab = 'features'">{{ isTmeResult ? '特征分析' : '细胞分类' }}</button></nav>
         <div v-if="resultTab === 'quantitative'" class="results-scroll">
           <template v-if="isTmeResult">
-            <div class="metric-grid"><div><span>组织面积</span><b>38.9<small>mm²</small></b></div><div><span>组织区域</span><b>4,107<small>块</small></b></div><div><span>分析倍率</span><b>20<small>X</small></b></div></div>
-            <section class="result-section"><div class="section-title"><h3>组织区域构成</h3><span>面积 · 占组织%</span></div><div class="composition-list"><div v-for="item in tissueComposition" :key="item.name"><div><span><i :style="{ background: item.color }" />{{ item.name }}</span><b>{{ item.value }}</b></div><div class="composition-track"><i :style="{ width: `${item.percent}%`, background: item.color }" /></div></div></div></section>
-            <section class="result-section"><div class="section-title"><h3>细胞核构成</h3><span>数量 · 占比</span></div><div class="nuclei-list"><div v-for="item in nucleiComposition" :key="item.name"><span>{{ item.name }}</span><i><b :style="{ width: `${item.percent}%` }" /></i><strong>{{ item.value }}</strong></div></div><p class="mt-3 text-xs">共 178,055 个细胞核</p></section>
+            <div class="metric-grid"><div><span>分类数</span><b>4</b></div><div><span>总计数</span><b>3,809</b></div><div><span>分析倍率</span><b>20<small>X</small></b></div></div>
+            <section class="merged-annotation-card annotation-global-card">
+              <header><h3>标注显示</h3><button :class="['annotation-switch', annotationLayerVisible && 'active']" role="switch" :aria-checked="annotationLayerVisible" :aria-label="annotationLayerVisible ? '隐藏全部标注' : '显示全部标注'" @click="toggleAllAnnotations"><i /></button></header>
+              <label class="merged-opacity"><span>全局透明度</span><b>{{ annotationOpacity }}%</b><input v-model="annotationOpacity" type="range" min="0" max="100" /></label>
+            </section>
+            <section class="merged-annotation-card">
+              <header class="annotation-group-heading"><h3>细胞核</h3><div><span>{{ nucleusLabels.length }} 个分类</span><b>{{ nucleusOpacity }}%</b><button :class="['annotation-switch', showNuclei && 'active']" role="switch" :aria-checked="showNuclei" :aria-label="showNuclei ? '隐藏细胞核标注' : '显示细胞核标注'" @click="showNuclei = !showNuclei"><i /></button></div></header>
+              <label class="group-opacity"><span>细胞核透明度</span><input v-model="nucleusOpacity" type="range" min="0" max="100" /></label>
+              <div class="merged-annotation-list">
+                <article v-for="label in nucleusLabels" :key="label.id" class="annotation-class-row">
+                  <div><button :class="['annotation-switch small', label.visible && 'active']" role="switch" :aria-checked="label.visible" :aria-label="`${label.visible ? '隐藏' : '显示'} ${label.name}`" @click="label.visible = !label.visible"><i /></button><i class="annotation-color" :style="{ background: label.color }" /><span :title="label.name">{{ label.name }}</span><strong>{{ label.count.toLocaleString() }}</strong><input v-model="label.opacity" class="label-opacity" type="range" min="0" max="100" :aria-label="`${label.name}透明度`" /></div>
+                  <i class="annotation-count-track"><b :style="{ width: `${annotationBarWidth(label, nucleusLabels)}%`, background: label.color }" /></i>
+                </article>
+              </div>
+            </section>
+            <section class="merged-annotation-card">
+              <header class="annotation-group-heading"><h3>区域</h3><div><span>{{ regionLabels.length }} 个分类</span><b>{{ regionOpacity }}%</b><button :class="['annotation-switch', showTissueRegions && 'active']" role="switch" :aria-checked="showTissueRegions" :aria-label="showTissueRegions ? '隐藏区域标注' : '显示区域标注'" @click="showTissueRegions = !showTissueRegions"><i /></button></div></header>
+              <label class="group-opacity"><span>区域透明度</span><input v-model="regionOpacity" type="range" min="0" max="100" /></label>
+              <div class="merged-annotation-list">
+                <article v-for="label in regionLabels" :key="label.id" class="annotation-class-row">
+                  <div><button :class="['annotation-switch small', label.visible && 'active']" role="switch" :aria-checked="label.visible" :aria-label="`${label.visible ? '隐藏' : '显示'} ${label.name}`" @click="label.visible = !label.visible"><i /></button><i class="annotation-color" :style="{ background: label.color }" /><span :title="label.name">{{ label.name }}</span><strong>{{ label.count.toLocaleString() }}</strong><input v-model="label.opacity" class="label-opacity" type="range" min="0" max="100" :aria-label="`${label.name}透明度`" /></div>
+                  <i class="annotation-count-track"><b :style="{ width: `${annotationBarWidth(label, regionLabels)}%`, background: label.color }" /></i>
+                </article>
+              </div>
+            </section>
           </template>
           <template v-else>
             <div class="metric-grid"><div><span>检测细胞核</span><b>178,055</b></div><div><span>有效实例</span><b>176,842</b></div><div><span>平均置信度</span><b>94.2<small>%</small></b></div></div>
@@ -803,8 +746,7 @@ async function toggleFullscreen() {
             <div class="tme-result-toolbox" aria-label="TME 查看工具">
               <button :class="showNuclei && 'active'" @click="toggleResultNuclei"><Grid3X3 :size="14" /><span>细胞核</span><em>{{ showNuclei ? 'ON' : 'OFF' }}</em></button>
               <button :class="showFeatureLayer && 'active'" @click="toggleResultHeatmap"><Layers :size="14" /><span>特征热力图</span><em>{{ showFeatureLayer ? 'ON' : 'OFF' }}</em></button>
-              <button :class="(viewerPanel === 'annotations' || annotationLayerVisible) && 'active'" @click="toggleResultAnnotations"><Tags :size="14" /><span>标注</span></button>
-              <button class="spark" @click="showTmeFeatureAnalysis = true"><BarChart3 :size="14" /><span>SPARK 特征分析</span></button>
+              <button class="feature-analysis-button" @click="showTmeFeatureAnalysis = true"><BarChart3 :size="14" /><span>特征分析</span></button>
             </div>
             <div v-if="showNuclei || showTissueRegions || showFeatureLayer" class="tme-result-layer-settings">
               <label v-if="showNuclei || showTissueRegions"><span>标注透明度</span><input v-model="annotationOpacity" type="range" min="0" max="100" /><b>{{ annotationOpacity }}%</b></label>
@@ -816,7 +758,6 @@ async function toggleFullscreen() {
           </template>
           <template v-else><div class="feature-summary"><div><span>分类数</span><b>5</b></div><div><span>细胞核</span><b>178k</b></div><div><span>平均密度</span><b>4,577</b></div><div><span>耗时</span><b>18s</b></div></div><section class="result-section"><div class="section-title"><h3>分类明细</h3><span>模型独立输出</span></div><div class="classification-list"><div v-for="item in nucleiComposition" :key="item.name"><span>{{ item.name }}</span><strong>{{ item.value }}</strong><small>{{ item.percent }}%</small></div></div></section></template>
         </div>
-        <div v-else class="results-scroll report-panel"><div class="report-status"><FileText :size="20" /><div><b>{{ activeResultRun.name }} 分析报告</b><p>仅根据当前模型在本张 WSI 上的结果生成。</p></div></div><template v-if="reportGenerated"><section><h3>结果摘要</h3><p v-if="isTmeResult">当前组织区域以 Stroma 为主，占组织面积约 88%。细胞核构成中 Stromal nucleus 数量最高，空间特征结果建议结合 ROI 复核。</p><p v-else>当前共检测 178,055 个细胞核，有效实例占比 99.3%。Stromal nucleus 为主要分类，建议优先复核低置信度和边界不完整实例。</p></section><section><h3>重点指标</h3><ul v-if="isTmeResult"><li>组织面积：38.9 mm²</li><li>细胞核总数：178,055</li><li>空间特征：5 项可查看</li></ul><ul v-else><li>有效实例：176,842</li><li>平均置信度：94.2%</li><li>待复核实例：1,213</li></ul></section></template><button class="btn-primary w-full" @click="generateReport"><FileText :size="16" />{{ reportGenerated ? '重新生成报告' : '生成报告草稿' }}</button></div>
       </template>
     </aside>
     <TmeFeatureAnalysisModal
@@ -839,10 +780,13 @@ async function toggleFullscreen() {
 .viewer-icon-button::after{position:absolute;left:50%;bottom:calc(100% + 7px);z-index:60;visibility:hidden;transform:translateX(-50%);border:1px solid rgb(255 255 255 / .12);border-radius:4px;background:#292b32;padding:5px 7px;color:#e2e8f0;box-shadow:0 8px 22px rgb(0 0 0 / .4);content:attr(data-tooltip);font-size:10px;line-height:1;opacity:0;pointer-events:none;white-space:nowrap}.viewer-icon-button:hover::after,.viewer-icon-button:focus-visible::after{visibility:visible;opacity:1}.viewer-icon-button:disabled::after{display:none}.viewer-toolbar-utilities .viewer-icon-button:last-child::after{right:0;left:auto;transform:none}.toolbar-tool-pair{display:flex;flex:none;align-items:center;gap:2px;border:1px solid rgb(255 255 255 / .07);border-radius:5px;background:#111217;padding:1px}.toolbar-tool-anchor{position:relative;flex:none}.viewer-tool-popover{position:absolute;left:50%;top:78px;z-index:45;width:220px;transform:translateX(-50%);border:1px solid rgb(255 255 255 / .12);border-radius:6px;background:#202126;padding:10px;box-shadow:0 18px 42px rgb(0 0 0 / .52)}.count-tool-popover header{display:flex;align-items:center;justify-content:space-between;font-size:12px}.count-tool-popover header span{color:#d292f4}.count-tool-popover footer{display:flex;justify-content:flex-end;gap:12px;margin-top:8px;border-top:1px solid rgb(255 255 255 / .06);padding-top:8px}.count-tool-popover footer button{display:flex;align-items:center;gap:4px;color:#94a3b8;font-size:10px}.count-tool-popover footer button:disabled{opacity:.3}
 .viewer-flyout{max-height:calc(100% - 164px);overflow:hidden;display:flex;flex-direction:column}.viewer-info-content{min-height:0;overflow-y:auto;padding:12px}.viewer-info-tabs{display:grid;height:34px;grid-template-columns:1fr 1fr;border-radius:5px;background:#17181d;padding:3px}.viewer-info-tabs button{border-radius:4px;color:#7f8a9e;font-size:11px}.viewer-info-tabs button.active{background:#3a2344;color:#e9c4f8}.viewer-metadata{margin-top:10px}.pixel-inspector{display:grid;gap:4px;border:1px solid rgb(143 53 183 / .42);border-radius:5px;background:rgb(143 53 183 / .12);padding:10px}.pixel-inspector span{color:#a78bb3;font-size:10px}.pixel-inspector b{color:#e8b8f8;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:500}.viewer-metadata dl{margin-top:10px}.viewer-metadata dl>div{display:grid;min-height:31px;grid-template-columns:88px minmax(0,1fr);align-items:center;border-bottom:1px solid rgb(255 255 255 / .06);font-size:10px}.viewer-metadata dt{color:#778398}.viewer-metadata dd{overflow:hidden;color:#d2d9e4;text-align:right;text-overflow:ellipsis;white-space:nowrap}.viewer-labels{display:grid;gap:12px;margin-top:10px}.viewer-labels article>header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}.viewer-labels article>header b{font-size:11px}.viewer-labels article>header span{color:#64748b;font-size:9px}.slide-label-preview{position:relative;display:flex;height:92px;overflow:hidden;flex-direction:column;justify-content:center;border:1px solid #d9d5ca;border-radius:4px;background:#ebe8dd;padding:12px;color:#24252b}.slide-label-preview::after{position:absolute;right:16px;bottom:13px;width:58px;height:25px;background:repeating-linear-gradient(90deg,#17181d 0 2px,transparent 2px 4px,#17181d 4px 5px,transparent 5px 7px);content:''}.slide-label-preview strong{max-width:190px;font-size:13px}.slide-label-preview span{margin-top:5px;color:#4b5563;font-size:10px}.slide-label-preview i{position:absolute;right:18px;top:14px;width:42px;height:18px;border:1px solid #7b8390;border-radius:9px}.viewer-labels img{display:block;width:100%;border:1px solid rgb(255 255 255 / .08);border-radius:4px;background:white}.macro-preview{height:128px;object-fit:cover;object-position:center}.thumbnail-preview{height:168px;object-fit:contain}
 .wsi-file-name{display:flex;min-width:0;max-width:100%;align-items:baseline;color:inherit;font-weight:600;cursor:pointer;outline:none}.wsi-file-name:hover,.wsi-file-name:focus-visible{color:#e8b8f8}.wsi-file-name span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wsi-file-name em{flex:none;font-style:normal;white-space:nowrap}.wsi-file-name-tip{position:fixed;z-index:90;width:max-content;max-width:min(420px,calc(100vw - 24px));border:1px solid rgb(255 255 255 / .12);border-radius:5px;background:#292b32;padding:7px 9px;color:#e2e8f0;box-shadow:0 10px 28px rgb(0 0 0 / .42);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;line-height:1.45;overflow-wrap:anywhere;pointer-events:none}.object-progress-summary{position:relative;min-height:31px}.model-summary{min-width:0;overflow:hidden;color:#cbd5e1;font-weight:600;text-overflow:ellipsis;white-space:nowrap}.model-summary.empty{color:#64748b;font-weight:500}.model-summary.multiple{display:flex;align-items:center;gap:3px;color:#d292f4}.model-summary.multiple:hover,.model-summary.multiple:focus-visible{color:#edc8fa;outline:none}.model-progress-details{position:absolute;left:-5px;right:-5px;top:calc(100% + 5px);z-index:60;display:none;gap:9px;border:1px solid rgb(255 255 255 / .12);border-radius:6px;background:rgb(17 18 23 / .98);padding:10px;box-shadow:0 16px 36px rgb(0 0 0 / .52)}.model-progress-details::before{position:absolute;right:0;bottom:100%;left:0;height:6px;content:''}.object-progress-summary.has-multiple-models:hover .model-progress-details,.object-progress-summary.has-multiple-models:focus-within .model-progress-details{display:grid}.model-progress-title{color:#cbd5e1;font-size:10px;font-weight:600}.model-progress-details>div>div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:9px}.model-progress-details span{min-width:0;overflow:hidden;color:#b7c0ce;text-overflow:ellipsis;white-space:nowrap}.model-progress-details small{flex:none;color:#64748b}.model-progress-details i{display:block;height:3px;margin-top:4px;overflow:hidden;border-radius:2px;background:#30323a}.model-progress-details i b{display:block;height:100%;border-radius:2px;background:#b45ed4}
+.case-context{flex:none;border-bottom:1px solid rgb(255 255 255 / .08);background:#191a20;padding:9px}.case-context-toggle{display:flex;width:100%;align-items:center;justify-content:space-between;border-radius:6px;padding:7px 8px;text-align:left}.case-context-toggle:hover{background:rgb(255 255 255 / .04)}.case-context-toggle span,.case-context-toggle b,.case-context-toggle small{display:block;min-width:0}.case-context-toggle b{color:#d8dee9;font-size:13px}.case-context-toggle small{margin-top:3px;color:#d292f4;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px}.case-context-toggle svg{color:#64748b;transition:transform .15s}.case-context-toggle svg.open{transform:rotate(180deg)}.case-context-body{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:5px;border:1px solid rgb(255 255 255 / .07);border-radius:6px;background:#15161b;padding:10px}.case-context-body>div{min-width:0}.case-context-body .wide{grid-column:1/-1}.case-context-body span,.case-context-body b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.case-context-body span{color:#7e8ca0;font-size:10px}.case-context-body b{margin-top:3px;color:#cbd5e1;font-size:11px;font-weight:500}.case-context-body>button{display:flex;grid-column:1/-1;align-items:center;gap:5px;border-top:1px solid rgb(255 255 255 / .06);padding-top:9px;color:#d292f4;font-size:10.5px;text-align:left}.case-context-body>button:hover{color:#edc8fa}
 .active-result-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;border-top:1px solid rgb(255 255 255 / .07);padding-top:11px}.active-result-summary b,.active-result-summary small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.active-result-summary small{margin-top:2px}.active-result-summary em{flex:none;color:#8490a3;font-size:10px;font-style:normal}.result-model-switcher{display:grid;flex:none;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:6px;border-bottom:1px solid rgb(255 255 255 / .08);padding:8px 10px;background:#191a20}.result-model-switcher button{min-width:0;height:48px;border:1px solid rgb(255 255 255 / .08);border-radius:5px;padding:7px 9px;text-align:left}.result-model-switcher span,.result-model-switcher small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.result-model-switcher span{color:#b7c0ce;font-size:11px;font-weight:600}.result-model-switcher small{margin-top:3px;color:#64748b;font-size:9px}.result-model-switcher button.active{border-color:rgb(143 53 183 / .72);background:rgb(143 53 183 / .18)}.result-model-switcher button.active span{color:#e9c4f8}.result-model-switcher button.active small{color:#b886ca}.results-empty{display:grid;min-height:0;flex:1;place-content:center;justify-items:center;padding:24px;color:#64748b;text-align:center}.results-empty b{margin-top:10px;color:#cbd5e1;font-size:13px}.results-empty p{margin-top:5px;max-width:240px;font-size:11px;line-height:1.7}
 .tme-analysis-entry{border-color:rgb(88 112 210 / .5);background:rgb(64 89 190 / .12);color:#b9c7ff}.tme-analysis-entry:hover{border-color:#647fe4;background:rgb(64 89 190 / .24);color:#e0e7ff}
 .metric-grid>div,.feature-summary>div{min-width:0}.metric-grid span,.feature-summary span,.metric-grid b,.feature-summary b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.quality-list{margin-top:8px}.quality-list>div{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgb(255 255 255 / .06);padding:8px 0;font-size:11px}.quality-list dt{color:#8490a3}.quality-list dd{color:#d8dee9}.classification-list{margin-top:9px}.classification-list>div{display:grid;grid-template-columns:minmax(0,1fr) 72px 34px;align-items:center;gap:8px;border-bottom:1px solid rgb(255 255 255 / .06);padding:8px 0;font-size:10px}.classification-list span{overflow:hidden;color:#9aa6b8;text-overflow:ellipsis;white-space:nowrap}.classification-list strong{font-weight:500;text-align:right}.classification-list small{color:#64748b;text-align:right}
 .annotation-flyout{width:350px}.annotation-panel{min-height:0;overflow-y:auto;padding:12px}.annotation-master{width:100%;height:34px;border:1px solid #485a9d;border-radius:5px;background:#22283b;color:#aebbe9;font-size:12px;font-weight:600}.annotation-master.active{border-color:#5477e4;background:#355ec5;color:white}.annotation-opacity{display:grid;height:38px;grid-template-columns:54px minmax(0,1fr) 38px;align-items:center;gap:7px;color:#9aa6b8;font-size:10px}.annotation-opacity input{width:100%;accent-color:#4d79e6}.annotation-opacity b{color:#cbd5e1;text-align:right}.annotation-global-actions,.annotation-group-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px}.annotation-global-actions button,.annotation-group-actions button{height:28px;border:1px solid rgb(255 255 255 / .09);border-radius:4px;background:#252733;color:#9aa6b8;font-size:10px}.annotation-global-actions button:hover,.annotation-group-actions button:hover{border-color:#5069c4;color:#d9e0ef}.annotation-quant{margin-top:12px;border-top:1px solid rgb(255 255 255 / .08);padding-top:11px}.annotation-quant header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.annotation-quant header b,.annotation-quant header small{display:block}.annotation-quant header b{font-size:12px}.annotation-quant header small{margin-top:3px;color:#6f7b8e;font-size:9px;line-height:1.45}.annotation-quant header em{flex:none;border-radius:8px;background:rgb(30 147 187 / .16);padding:3px 6px;color:#64cee8;font-size:8px;font-style:normal}.annotation-quant>button{display:flex;width:100%;height:32px;align-items:center;justify-content:center;gap:6px;margin-top:8px;border:1px solid #5071d9;border-radius:4px;background:#315fac;color:white;font-size:10px}.annotation-quant>button.active{border-color:#d08ced;background:#714088}.annotation-group{margin-top:12px}.annotation-group>header{display:flex;height:32px;align-items:center;justify-content:space-between;border:1px solid #3e55a4;border-radius:4px;background:#212641;padding:0 8px}.annotation-group>header b{font-size:11px}.annotation-group>header button{color:#b8c6ee;font-size:9px}.annotation-group-actions{margin-top:5px}.annotation-label-list{margin-top:6px;border:1px solid rgb(255 255 255 / .07);border-radius:5px;background:#17181d}.annotation-label-list label{display:grid;min-height:32px;grid-template-columns:14px 19px minmax(0,1fr) 7px 34px;align-items:center;gap:6px;border-bottom:1px solid rgb(255 255 255 / .06);padding:4px 6px}.annotation-label-list label:last-child{border-bottom:0}.annotation-label-list label:hover{background:rgb(81 103 177 / .09)}.annotation-label-list input[type=checkbox]{accent-color:#4f79e4}.annotation-label-list input[type=color]{width:18px;height:18px;overflow:hidden;border:1px solid #596274;border-radius:3px;background:transparent;padding:1px}.annotation-label-list span{overflow:hidden;color:#c0c8d5;font-size:9px;text-overflow:ellipsis;white-space:nowrap}.annotation-label-list i{width:7px;height:7px;border-radius:50%}.annotation-label-list em{border:1px solid rgb(255 255 255 / .08);border-radius:3px;padding:2px 3px;color:#7f8a9e;font-size:8px;font-style:normal;text-align:center}.region-annotation-layer{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none}.region-annotation-layer i{position:absolute;transform-origin:center;border:1px solid rgb(255 255 255 / .24);border-radius:42% 58% 48% 52% / 53% 44% 56% 47%;mix-blend-mode:multiply;filter:saturate(1.15)}
 .viewer-toolbar{min-height:46px}.viewer-toolbar-primary{width:100%}.tme-result-toolbox{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-top:9px}.tme-result-toolbox button{display:flex;min-width:0;height:34px;align-items:center;gap:6px;border:1px solid rgb(255 255 255 / .09);border-radius:5px;background:#17181d;padding:0 8px;color:#94a3b8;font-size:10px}.tme-result-toolbox button:hover{border-color:rgb(143 53 183 / .4);background:rgb(143 53 183 / .08);color:#d8b6e8}.tme-result-toolbox button.active{border-color:rgb(143 53 183 / .65);background:rgb(143 53 183 / .17);color:#e9c4f8}.tme-result-toolbox button:focus{outline:none}.tme-result-toolbox button:focus-visible{outline:2px solid rgb(143 53 183 / .48);outline-offset:1px}.tme-result-toolbox span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tme-result-toolbox em{margin-left:auto;color:#748099;font-size:8px;font-style:normal}.tme-result-toolbox button.active em{color:#d292f4}.tme-result-layer-settings{display:grid;gap:6px;margin-top:7px;border:1px solid rgb(255 255 255 / .07);border-radius:5px;background:#17181d;padding:7px}.tme-result-layer-settings label{display:grid;grid-template-columns:76px minmax(0,1fr) 34px;align-items:center;gap:6px;color:#8490a3;font-size:9px}.tme-result-layer-settings input{min-width:0;width:100%;accent-color:#9c36c7}.tme-result-layer-settings b{color:#b7c2d3;font-size:9px;font-weight:500;text-align:right}.feature-overview-meta{display:flex;align-items:center;justify-content:space-between;margin-top:9px;color:#6f7b8e;font-size:10px}.feature-overview-meta button{border-radius:4px;background:rgb(143 53 183 / .17);padding:4px 7px;color:#d292f4}.feature-overview-meta button:hover{background:rgb(143 53 183 / .28);color:#efc9ff}
+.result-tabs.two-tabs{grid-template-columns:repeat(2,1fr)}.tme-result-toolbox .feature-analysis-button{grid-column:1/-1;justify-content:center}
+.merged-annotation-card{margin-top:12px;overflow:hidden;border:1px solid rgb(255 255 255 / .08);border-radius:12px;background:#202126}.merged-annotation-card>header{display:flex;height:49px;align-items:center;justify-content:space-between;padding:0 12px}.merged-annotation-card h3{font-size:13px;font-weight:600}.annotation-group-heading>div{display:flex;align-items:center;gap:8px}.annotation-group-heading span{color:#748095;font-size:10px}.annotation-group-heading b{color:#d292f4;font-size:10px;font-weight:500}.annotation-switch{position:relative;width:40px;height:22px;flex:none;border-radius:999px;background:#444650;transition:background .16s}.annotation-switch i{position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#f8fafc;box-shadow:0 1px 3px rgb(0 0 0 / .45);transition:transform .16s}.annotation-switch.active{background:#9c36c7}.annotation-switch.active i{transform:translateX(18px)}.annotation-switch.small{width:38px;height:22px}.annotation-switch.small.active i{transform:translateX(16px)}.merged-opacity{display:grid;grid-template-columns:1fr auto;gap:7px;padding:0 12px 13px;color:#8490a3;font-size:10px}.merged-opacity b{color:#d292f4;font-weight:500}.merged-opacity input{grid-column:1/-1}.group-opacity{display:block;border-top:1px solid rgb(255 255 255 / .05);padding:0 12px 10px}.group-opacity span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}.merged-opacity input,.group-opacity input,.label-opacity{width:100%;accent-color:#9c36c7}.merged-annotation-list{border-top:1px solid rgb(255 255 255 / .07);padding:4px 12px 8px}.annotation-class-row{padding:6px 0 4px}.annotation-class-row>div{display:grid;grid-template-columns:38px 8px minmax(0,1fr) 54px 62px;align-items:center;gap:7px}.annotation-color{width:7px;height:7px;border-radius:50%}.annotation-class-row span{min-width:0;overflow:hidden;color:#aeb8c8;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.annotation-class-row strong{color:#e2e8f0;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10px;font-weight:600;text-align:right}.label-opacity{min-width:0}.annotation-count-track{display:block;height:4px;margin-top:4px;overflow:hidden;border-radius:2px;background:#34363e}.annotation-count-track b{display:block;height:100%;border-radius:2px}.merged-annotation-card input[type=range]{height:14px;cursor:pointer}
 @media (max-width:1500px){.workbench-shell{grid-template-columns:292px minmax(0,1fr) 350px}.viewer-toolbar-primary,.viewer-toolbar-secondary{padding-inline:8px}.tool-toggle{padding-inline:7px}.opacity-control{min-width:148px}.viewer-meta{display:none}}
 </style>

@@ -17,7 +17,7 @@ export const SPARK_FEATURE_CATEGORIES = [
   'Ripley空间聚集',
   'RoiMean',
   'RoiStd',
-  'SPARK',
+  '综合特征',
   'TILs浸润评分',
   '区域像素计数',
   '区域形态',
@@ -106,7 +106,7 @@ export const SPARK_FEATURES: SparkFeatureDefinition[] = Array.from({ length: 951
   const core = CORE_FEATURES[index]
   return {
     id: `spark-${index + 1}`,
-    name: core?.[0] || `SPARK FEATURE ${String(index + 1).padStart(3, '0')}`,
+    name: core?.[0] || `FEATURE ${String(index + 1).padStart(3, '0')}`,
     category: CORE_FEATURE_CATEGORIES[index] || SPARK_FEATURE_CATEGORIES[index % SPARK_FEATURE_CATEGORIES.length],
     value: core?.[1] || generatedValue(index),
     unit: core?.[2],

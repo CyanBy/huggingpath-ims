@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AlertTriangle, Plus } from '@lucide/vue'
+import { AlertTriangle, ArrowLeft, Plus, Play } from '@lucide/vue'
 import { countCaseAnalysisTasks, countWsiSuccessfulAnalyses, readAnalysisTasks } from '@/lib/analysisTasks'
 import { getPathologySiteLabel, getSamplingMethodLabel } from '@/lib/pathologySpecimens'
 import { readPathologyEntityDeletions, subscribePathologyEntityDeletions } from '@/lib/pathologyEntityLinks'
 import { useWorkspaceData } from '../composables/useWorkspaceData'
-import { writeWorkspaceWsis, type WorkspaceWsi } from '../data/pathologyWorkspace'
+import CaseWsiManagerModal from '../components/CaseWsiManagerModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,6 +17,7 @@ const current = computed(() => cases.value.find((item) => item.id === caseId.val
 const rows = computed(() => wsis.value.filter((item) => item.boundCase === caseId.value))
 const deleted = computed(() => !current.value || readPathologyEntityDeletions().deletedCaseIds.includes(caseId.value))
 const analysisCount = computed(() => countCaseAnalysisTasks(caseId.value, tasks.value))
+const wsiManagerOpen = ref(false)
 let unsubscribeDeletions: (() => void) | undefined
 
 function refreshTasks() { tasks.value = readAnalysisTasks() }
@@ -30,26 +31,29 @@ onUnmounted(() => {
 })
 function addWsi() {
   if (!current.value) return
-  const next: WorkspaceWsi = {
-    id: `wsi-${Date.now()}`,
-    fileName: `${caseId.value}_HE_${String(rows.value.length + 1).padStart(3, '0')}.svs`,
-    size: '待识别',
-    site: current.value.site,
-    samplingMethod: current.value.samplingMethod,
-    stain: 'HE',
-    boundCase: caseId.value,
-    uploadedAt: new Date().toISOString().slice(0, 10),
-  }
-  writeWorkspaceWsis([next, ...wsis.value])
-  refresh()
+  wsiManagerOpen.value = true
+}
+
+function analyzeCase() {
+  router.push({ path: '/workbench/tasks/new', query: { target: 'case', case: caseId.value } })
 }
 </script>
 
 <template>
   <div v-if="deleted" class="section-container grid min-h-[60dvh] place-items-center"><div class="max-w-[560px] rounded-lg border border-white/[0.08] bg-[#202126] px-8 py-10 text-center"><span class="mx-auto grid h-12 w-12 place-items-center rounded-lg bg-[#ef4444]/10 text-[#fca5a5]"><AlertTriangle :size="23" /></span><h1 class="mt-4 text-xl font-bold">Case 已删除</h1><p class="mt-2">Case {{ caseId }} 已随关联链路删除，当前详情不可继续访问。</p><button class="btn-primary mt-6" @click="router.push('/workbench/cases')">返回 Case 列表</button></div></div>
-  <div v-else class="min-h-[calc(100dvh-64px)] px-4 py-5 lg:px-6"><section class="rounded-lg border border-white/[0.08] bg-[#202126] p-5"><header class="mb-5 flex items-start justify-between"><div><h1 class="text-2xl font-bold">Case 详情</h1><p class="mt-2 text-sm">当前 Case：<code>{{ caseId }}</code></p></div><button class="btn-secondary" @click="router.back()">返回列表</button></header><div class="grid gap-3 border-t border-white/[0.06] pt-5 sm:grid-cols-2 xl:grid-cols-5"><div v-for="item in [['Case 编号',caseId],['WSI 数',rows.length],['取材部位',getPathologySiteLabel(current?.site || '')],['取材方式',getSamplingMethodLabel(current?.samplingMethod || '')],['分析次数',analysisCount]]" :key="String(item[0])" class="rounded-lg border border-white/[0.08] bg-[#17181d] p-4"><small class="text-[#64748b]">{{ item[0] }}</small><div class="mt-2 text-lg font-semibold">{{ item[1] }}</div></div></div></section><section class="mt-5 overflow-hidden rounded-lg border border-white/[0.08] bg-[#202126]"><header class="flex items-center justify-between border-b border-white/[0.06] p-4"><div><h2 class="font-semibold">关联 WSI</h2><p class="mt-1 text-xs">只显示当前 Case 绑定的切片</p></div><button class="btn-primary h-9" @click="addWsi"><Plus :size="15" />添加 WSI</button></header><div v-if="!rows.length" class="grid min-h-[220px] place-items-center text-sm text-[#64748b]">暂无关联 WSI</div><div v-else class="overflow-x-auto"><table class="w-full min-w-[900px] text-sm"><thead class="bg-[#252730]"><tr><th>文件名</th><th>缩略图</th><th>取材部位</th><th>取材方式</th><th>染色</th><th>文件大小</th><th>分析次数</th></tr></thead><tbody><tr v-for="row in rows" :key="row.id" class="border-t border-white/[0.06]"><td><button class="font-mono text-[#d292f4]" @click="router.push(`/workbench/wsi?preview=${row.id}`)">{{ row.fileName }}</button></td><td><div class="grid h-10 w-16 place-items-center overflow-hidden rounded border border-white/[0.08] bg-[#0d2024]"><img src="/wsi-demo.jpg" alt="WSI 缩略图" class="h-full w-full object-cover" /></div></td><td>{{ getPathologySiteLabel(row.site) }}</td><td>{{ getSamplingMethodLabel(row.samplingMethod) }}</td><td>{{ row.stain }}</td><td>{{ row.size }}</td><td>{{ countWsiSuccessfulAnalyses(row.id, tasks) }} 次</td></tr></tbody></table></div></section></div>
+  <div v-else class="min-h-[calc(100dvh-64px)] px-4 py-5 lg:px-6">
+    <header class="mb-5 flex flex-wrap items-center justify-between gap-3"><div><button class="mb-3 flex items-center gap-2 text-sm text-[#d292f4]" @click="router.push('/workbench/cases')"><ArrowLeft :size="15" />返回 Case 列表</button><h1 class="text-2xl font-bold">Case 详情</h1><p class="mt-1 font-mono text-sm text-[#94a3b8]">{{ caseId }}</p></div><div class="flex gap-2"><button class="btn-secondary h-10" @click="addWsi"><Plus :size="15" />添加 WSI</button><button class="btn-primary h-10" :disabled="!rows.length" @click="analyzeCase"><Play :size="15" />发起分析</button></div></header>
+    <section class="rounded-lg border border-white/[0.08] bg-[#202126] p-5">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 class="font-semibold">基本信息</h2><p class="mt-1 text-xs text-[#64748b]">临床与标本信息使用脱敏数据展示。</p></div><span :class="['rounded-md border px-2 py-1 text-xs',current?.priority==='加急'?'border-[#ef4444]/40 bg-[#ef4444]/10 text-[#fca5a5]':'border-white/[0.10] text-[#cbd5e1]']">{{ current?.priority }}</span></div>
+      <dl class="case-info-grid"><div><dt>Case 编号</dt><dd class="font-mono">{{ caseId }}</dd></div><div><dt>脱敏患者编号</dt><dd>{{ current?.patientCode }}</dd></div><div><dt>年龄 / 性别</dt><dd>{{ current?.age ?? '未知' }} / {{ current?.sex }}</dd></div><div><dt>收样日期</dt><dd>{{ current?.receivedAt }}</dd></div><div class="sm:col-span-2"><dt>临床诊断</dt><dd>{{ current?.diagnosis }}</dd></div><div><dt>取材部位</dt><dd>{{ getPathologySiteLabel(current?.site || '') }}</dd></div><div><dt>取材方式</dt><dd>{{ getSamplingMethodLabel(current?.samplingMethod || '') }}</dd></div><div><dt>送检科室</dt><dd>{{ current?.department || '未填写' }}</dd></div><div><dt>处理状态</dt><dd>{{ current?.status }}</dd></div><div class="sm:col-span-2"><dt>备注</dt><dd>{{ current?.remark || '无' }}</dd></div></dl>
+      <div class="mt-5 grid gap-3 border-t border-white/[0.06] pt-5 sm:grid-cols-2"><div class="rounded-lg border border-white/[0.08] bg-[#17181d] p-4"><small class="text-[#64748b]">关联 WSI</small><b class="mt-2 block text-xl">{{ rows.length }} 张</b></div><div class="rounded-lg border border-white/[0.08] bg-[#17181d] p-4"><small class="text-[#64748b]">分析次数</small><b class="mt-2 block text-xl">{{ analysisCount }} 次</b></div></div>
+    </section>
+    <section class="mt-5 overflow-hidden rounded-lg border border-white/[0.08] bg-[#202126]"><header class="flex items-center justify-between border-b border-white/[0.06] p-4"><div><h2 class="font-semibold">关联 WSI</h2><p class="mt-1 text-xs">只显示当前 Case 绑定的切片</p></div><button class="btn-secondary h-9" @click="addWsi"><Plus :size="15" />添加 WSI</button></header><div v-if="!rows.length" class="grid min-h-[220px] place-items-center text-center text-sm text-[#64748b]"><div><b class="block text-[#cbd5e1]">当前 Case 还没有 WSI</b><p class="mt-2">可直接上传新切片，或绑定工作台中已有的未归属 WSI。</p><button class="btn-primary mt-4" @click="addWsi">添加第一张 WSI</button></div></div><div v-else class="overflow-x-auto"><table class="w-full min-w-[900px] text-sm"><thead class="bg-[#252730]"><tr><th>文件名</th><th>缩略图</th><th>取材部位</th><th>取材方式</th><th>染色</th><th>文件大小</th><th>分析次数</th></tr></thead><tbody><tr v-for="row in rows" :key="row.id" class="border-t border-white/[0.06]"><td><button class="font-mono text-[#d292f4]" @click="router.push(`/workbench/wsi?preview=${row.id}`)">{{ row.fileName }}</button></td><td><div class="grid h-10 w-16 place-items-center overflow-hidden rounded border border-white/[0.08] bg-[#0d2024]"><img src="/wsi-demo.jpg" alt="WSI 缩略图" class="h-full w-full object-cover" /></div></td><td>{{ getPathologySiteLabel(row.site) }}</td><td>{{ getSamplingMethodLabel(row.samplingMethod) }}</td><td>{{ row.stain }}</td><td>{{ row.size }}</td><td>{{ countWsiSuccessfulAnalyses(row.id, tasks) }} 次</td></tr></tbody></table></div></section>
+    <Teleport to="body"><CaseWsiManagerModal v-if="wsiManagerOpen && current" :case-item="current" @close="wsiManagerOpen=false" @changed="refresh" /></Teleport>
+  </div>
 </template>
 
 <style scoped>
 th, td { padding: 12px 14px; text-align: left; } th { font-weight: 600; color: #cbd5e1; }
+.case-info-grid{display:grid;gap:10px}@media(min-width:640px){.case-info-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}.case-info-grid>div{min-width:0;border:1px solid rgb(255 255 255 / .07);border-radius:7px;background:#17181d;padding:12px}.case-info-grid dt{color:#64748b;font-size:11px}.case-info-grid dd{margin-top:6px;color:#e2e8f0;font-size:13px;line-height:1.55;overflow-wrap:anywhere}
 </style>
