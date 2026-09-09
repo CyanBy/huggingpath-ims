@@ -2,12 +2,14 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ChevronDown, ChevronRight, Plus, Search } from '@lucide/vue'
-import { countCaseAnalysisTasks, createTaskFromCases } from '@/lib/analysisTasks'
+import { configureAndStartAnalysisTask, countCaseAnalysisTasks, createTaskFromCases, getCaseAnalysisHistory } from '@/lib/analysisTasks'
+import type { AnalysisConfigurationItem, AnalysisModelAssignments } from '@/lib/analysisConfiguration'
 import { getCaseResearchProjects } from '@/lib/pathologyEntityLinks'
 import { getPathologySiteLabel, getSamplingMethodLabel } from '@/lib/pathologySpecimens'
 import { useAnalysisTasks } from '../composables/useAnalysisTasks'
 import { useWorkspaceData } from '../composables/useWorkspaceData'
 import CaseEditorModal from '../components/CaseEditorModal.vue'
+import AnalysisConfigurationModal from '../components/AnalysisConfigurationModal.vue'
 import type { WorkspaceCase } from '../data/pathologyWorkspace'
 
 const route = useRoute()
@@ -19,6 +21,7 @@ const projectFilter = ref('全部项目')
 const selectedIds = ref<string[]>([])
 const expanded = ref<string[]>([])
 const createOpen = ref(false)
+const analysisCases = ref<WorkspaceCase[]>([])
 
 onMounted(() => {
   sessionStorage.removeItem('huggingpath.workbench.caseSelection.v1')
@@ -35,20 +38,46 @@ const filtered = computed(() => {
   })
 })
 const selected = computed(() => cases.value.filter((item) => selectedIds.value.includes(item.id)))
+const selectedEmptyCount = computed(() => selected.value.filter((item) => !caseWsis(item.id).length).length)
+const analysisConfigurationItems = computed<AnalysisConfigurationItem[]>(() => analysisCases.value.flatMap((caseItem) => caseWsis(caseItem.id).map((wsi) => ({
+  id: wsi.id,
+  name: wsi.fileName,
+  organ: wsi.site,
+  stain: wsi.stain,
+  size: wsi.size,
+  caseId: caseItem.id,
+  caseName: caseItem.id,
+}))))
 const allSelected = computed(() => filtered.value.length > 0 && filtered.value.every((item) => selectedIds.value.includes(item.id)))
 function caseWsis(id: string) { return wsis.value.filter((item) => item.boundCase === id) }
 function toggle(id: string) { selectedIds.value = selectedIds.value.includes(id) ? selectedIds.value.filter((item) => item !== id) : [...selectedIds.value, id] }
 function toggleAll() { selectedIds.value = allSelected.value ? selectedIds.value.filter((id) => !filtered.value.some((item) => item.id === id)) : [...new Set([...selectedIds.value, ...filtered.value.map((item) => item.id)])] }
 function rowClick(event: MouseEvent, id: string) { if (event.target instanceof Element && event.target.closest('button,input,a')) return; toggle(id) }
 function startAnalysis() {
-  if (!selected.value.length) return
-  const task = createTaskFromCases({ cases: selected.value.map((item) => ({ caseId: item.id, organ: item.site, wsiCount: caseWsis(item.id).length, wsis: caseWsis(item.id).map((wsi) => ({ id: wsi.id, fileName: wsi.fileName, stain: wsi.stain, size: wsi.size })) })) })
+  if (!selected.value.length || selectedEmptyCount.value) return
+  analysisCases.value = [...selected.value]
+}
+function launchConfigured(assignments: AnalysisModelAssignments) {
+  if (!analysisCases.value.length) return
+  const task = createTaskFromCases({ cases: analysisCases.value.map((item) => ({ caseId: item.id, organ: item.site, wsiCount: caseWsis(item.id).length, wsis: caseWsis(item.id).map((wsi) => ({ id: wsi.id, fileName: wsi.fileName, stain: wsi.stain, size: wsi.size })) })) })
+  configureAndStartAnalysisTask(task.id, assignments)
+  analysisCases.value = []
+  selectedIds.value = []
   router.push(`/workbench/run/${task.id}`)
 }
 function createdCase(value: WorkspaceCase) {
   createOpen.value = false
   refresh()
   router.push(`/workbench/cases/${value.id}`)
+}
+function viewCaseAnalysis(id: string) {
+  const latest = getCaseAnalysisHistory(id, tasks.value).find((historyTask) => {
+    const objectIds = new Set(historyTask.objects.filter((item) => item.caseId === id).map((item) => item.id))
+    return historyTask.models.some((run) => objectIds.has(run.objectId) && run.status === '分析完成')
+  })
+  if (!latest) return
+  const object = latest.objects.find((item) => item.caseId === id)
+  router.push({ path: `/workbench/run/${latest.id}`, query: { object: object?.id, historyScope: 'case' } })
 }
 </script>
 
@@ -79,12 +108,12 @@ function createdCase(value: WorkspaceCase) {
           <h2 class="font-semibold">Case 列表</h2>
           <p class="mt-0.5 text-xs text-[#94a3b8]">点击行空白处可多选，展开后查看关联 WSI。</p>
         </div>
-        <button :disabled="!selected.length" class="btn-primary h-9 shrink-0 disabled:cursor-not-allowed disabled:opacity-40" @click="startAnalysis">分析已选 Case（{{ selected.length }}）</button>
+        <div class="text-right"><button :disabled="!selected.length||Boolean(selectedEmptyCount)" :title="selectedEmptyCount?`所选 Case 中有 ${selectedEmptyCount} 个没有 WSI`:''" class="btn-primary h-9 shrink-0 disabled:cursor-not-allowed disabled:opacity-40" @click="startAnalysis">配置并分析已选 Case（{{ selected.length }}）</button><small v-if="selectedEmptyCount" class="mt-1 block text-[#f0b36c]">{{ selectedEmptyCount }} 个所选 Case 暂无 WSI</small></div>
       </div>
-      <div class="overflow-x-auto"><table class="w-full min-w-[1240px] text-sm"><thead class="bg-[#252730]"><tr><th class="w-12"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th><th>Case 编号</th><th>患者 / 诊断</th><th>取材信息</th><th>年龄 / 性别</th><th>WSI 数</th><th>研究项目</th><th>分析次数</th><th>状态</th><th>操作</th></tr></thead><tbody v-for="item in filtered" :key="item.id"><tr :class="['border-t border-white/[0.06] hover:bg-white/[0.025]',selectedIds.includes(item.id)&&'bg-[#8f35b7]/10']" @click="rowClick($event,item.id)"><td><input type="checkbox" :checked="selectedIds.includes(item.id)" @change="toggle(item.id)" /></td><td><div class="flex items-center gap-2"><button class="text-[#94a3b8]" @click="expanded=expanded.includes(item.id)?expanded.filter(id=>id!==item.id):[...expanded,item.id]"><ChevronDown v-if="expanded.includes(item.id)" :size="16" /><ChevronRight v-else :size="16" /></button><button class="font-mono text-[#d292f4]" @click="router.push(`/workbench/cases/${item.id}`)">{{ item.id }}</button></div><small class="ml-6 mt-1 block text-[#64748b]">{{ item.receivedAt }} · {{ item.priority }}</small></td><td><b class="block text-xs">{{ item.patientCode }}</b><small class="mt-1 block max-w-[240px] truncate text-[#64748b]" :title="item.diagnosis">{{ item.diagnosis }}</small></td><td>{{ getPathologySiteLabel(item.site) }} · {{ getSamplingMethodLabel(item.samplingMethod) }}</td><td>{{ item.age ?? '未知' }} / {{ item.sex }}</td><td>{{ caseWsis(item.id).length }}</td><td><span v-if="!getCaseResearchProjects(item.id).length" class="text-[#64748b]">未加入</span><span v-for="project in getCaseResearchProjects(item.id)" :key="project.id" class="mr-1 rounded bg-[#8f35b7]/15 px-2 py-1 text-xs text-[#d292f4]">{{ project.name }}</span></td><td>{{ countCaseAnalysisTasks(item.id,tasks) }} 次</td><td><span class="rounded-md border border-white/[0.08] px-2 py-1 text-xs">{{ item.status }}</span></td><td><button class="text-[#d292f4]" @click="router.push(`/workbench/cases/${item.id}`)">查看详情</button></td></tr><tr v-if="expanded.includes(item.id)" class="bg-[#17181d]"><td colspan="10" class="p-0"><div class="border-b border-white/[0.06] px-16 py-3 text-xs text-[#94a3b8]">送检科室：{{ item.department || '未填写' }}<span v-if="item.remark"> · 备注：{{ item.remark }}</span></div><div v-if="!caseWsis(item.id).length" class="px-16 py-5 text-sm text-[#64748b]">当前 Case 暂无关联 WSI。</div><div v-else class="grid gap-2 px-16 py-4"><button v-for="wsi in caseWsis(item.id)" :key="wsi.id" class="flex items-center justify-between rounded-md border border-white/[0.06] bg-[#202126] px-3 py-2 text-left" @click="router.push(`/workbench/wsi?preview=${wsi.id}`)"><span class="flex items-center gap-2"><img src="/wsi-demo.jpg" alt="WSI" class="h-8 w-12 rounded object-cover" /><span><b class="block font-mono text-xs">{{ wsi.fileName }}</b><small class="text-[#64748b]">{{ wsi.stain }} · {{ wsi.size }}</small></span></span><span class="text-xs text-[#d292f4]">查看 WSI</span></button></div></td></tr></tbody></table></div>
+      <div class="overflow-x-auto"><table class="w-full min-w-[1240px] text-sm"><thead class="bg-[#252730]"><tr><th class="w-12"><input type="checkbox" :checked="allSelected" @change="toggleAll" /></th><th>Case 编号</th><th>患者 / 诊断</th><th>取材信息</th><th>年龄 / 性别</th><th>WSI 数</th><th>研究项目</th><th>分析次数</th><th>状态</th><th>操作</th></tr></thead><tbody v-for="item in filtered" :key="item.id"><tr :class="['border-t border-white/[0.06] hover:bg-white/[0.025]',selectedIds.includes(item.id)&&'bg-[#8f35b7]/10']" @click="rowClick($event,item.id)"><td><input type="checkbox" :checked="selectedIds.includes(item.id)" @change="toggle(item.id)" /></td><td><div class="flex items-center gap-2"><button class="text-[#94a3b8]" @click="expanded=expanded.includes(item.id)?expanded.filter(id=>id!==item.id):[...expanded,item.id]"><ChevronDown v-if="expanded.includes(item.id)" :size="16" /><ChevronRight v-else :size="16" /></button><button class="font-mono text-[#d292f4]" @click="router.push(`/workbench/cases/${item.id}`)">{{ item.id }}</button></div><small class="ml-6 mt-1 block text-[#64748b]">{{ item.receivedAt }} · {{ item.priority }}</small></td><td><b class="block text-xs">{{ item.patientCode }}</b><small class="mt-1 block max-w-[240px] truncate text-[#64748b]" :title="item.diagnosis">{{ item.diagnosis }}</small></td><td>{{ getPathologySiteLabel(item.site) }} · {{ getSamplingMethodLabel(item.samplingMethod) }}</td><td>{{ item.age ?? '未知' }} / {{ item.sex }}</td><td>{{ caseWsis(item.id).length }}</td><td><span v-if="!getCaseResearchProjects(item.id).length" class="text-[#64748b]">未加入</span><span v-for="project in getCaseResearchProjects(item.id)" :key="project.id" class="mr-1 rounded bg-[#8f35b7]/15 px-2 py-1 text-xs text-[#d292f4]">{{ project.name }}</span></td><td>{{ countCaseAnalysisTasks(item.id,tasks) }} 次</td><td><span class="rounded-md border border-white/[0.08] px-2 py-1 text-xs">{{ item.status }}</span></td><td><div class="flex gap-3 whitespace-nowrap"><button v-if="getCaseAnalysisHistory(item.id,tasks).length" class="text-[#d292f4]" @click="viewCaseAnalysis(item.id)">查看分析</button><button class="text-[#d292f4]" @click="router.push(`/workbench/cases/${item.id}`)">查看详情</button></div></td></tr><tr v-if="expanded.includes(item.id)" class="bg-[#17181d]"><td colspan="10" class="p-0"><div class="border-b border-white/[0.06] px-16 py-3 text-xs text-[#94a3b8]">送检科室：{{ item.department || '未填写' }}<span v-if="item.remark"> · 备注：{{ item.remark }}</span></div><div v-if="!caseWsis(item.id).length" class="px-16 py-5 text-sm text-[#64748b]">当前 Case 暂无关联 WSI。</div><div v-else class="grid gap-2 px-16 py-4"><button v-for="wsi in caseWsis(item.id)" :key="wsi.id" class="flex items-center justify-between rounded-md border border-white/[0.06] bg-[#202126] px-3 py-2 text-left" @click="router.push(`/workbench/wsi?preview=${wsi.id}`)"><span class="flex items-center gap-2"><img src="/wsi-demo.jpg" alt="WSI" class="h-8 w-12 rounded object-cover" /><span><b class="block font-mono text-xs">{{ wsi.fileName }}</b><small class="text-[#64748b]">{{ wsi.stain }} · {{ wsi.size }}</small></span></span><span class="text-xs text-[#d292f4]">查看 WSI</span></button></div></td></tr></tbody></table></div>
     </section>
 
-    <Teleport to="body"><CaseEditorModal v-if="createOpen" @close="createOpen=false" @saved="createdCase" /></Teleport>
+    <Teleport to="body"><CaseEditorModal v-if="createOpen" @close="createOpen=false" @saved="createdCase" /><AnalysisConfigurationModal v-if="analysisCases.length" :items="analysisConfigurationItems" source-label="Case 管理" @close="analysisCases=[]" @confirm="launchConfigured" /></Teleport>
   </div>
 </template>
 

@@ -24,6 +24,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/workbench', redirect: '/workbench/tasks' },
   { path: '/workbench/run/:taskId', name: 'workbench-run', component: () => import('../views/WorkbenchRunView.vue'), meta: protectedRoute('analysis:manage') },
   { path: '/workbench/wsi', name: 'workbench-wsi', component: () => import('../views/WsiManagementView.vue'), meta: protectedRoute('wsi:manage') },
+  { path: '/workbench/transfers', name: 'workbench-transfers', component: () => import('../views/TransferCenterView.vue'), meta: protectedRoute('wsi:manage') },
   { path: '/workbench/cases', name: 'workbench-cases', component: () => import('../views/CaseManagementView.vue'), meta: protectedRoute('cases:manage') },
   { path: '/workbench/cases/:caseId', name: 'workbench-case-detail', component: () => import('../views/CaseDetailView.vue'), meta: protectedRoute('cases:manage') },
   { path: '/workbench/projects', name: 'workbench-projects', component: () => import('../views/ProjectManagementView.vue'), meta: protectedRoute('projects:manage') },

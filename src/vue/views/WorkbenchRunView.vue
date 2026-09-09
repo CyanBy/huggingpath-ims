@@ -10,6 +10,7 @@ import {
   CircleHelp,
   Columns2,
   Grid3X3,
+  History,
   Info,
   LayoutGrid,
   Layers,
@@ -33,9 +34,11 @@ import {
 import {
   AVAILABLE_ANALYSIS_MODELS,
   deletePendingObject,
+  getCaseAnalysisHistory,
   getModelDefinition,
   getObjectRuns,
   getTaskDisplayName,
+  getWsiAnalysisHistory,
   isModelCompatible,
   reanalyzeAnalysisObject,
   reanalyzeTask,
@@ -45,6 +48,7 @@ import {
   stopAnalysisTask,
   type AnalysisModelRunRecord,
   type AnalysisTaskObjectRecord,
+  type AnalysisTaskRecord,
   type AnalysisTaskStatus,
 } from '@/lib/analysisTasks'
 import { useAnalysisTasks } from '../composables/useAnalysisTasks'
@@ -122,6 +126,7 @@ const fileNameTip = ref<{ text: string; x: number; y: number } | null>(null)
 const fileNameTipElement = ref<HTMLElement | null>(null)
 const showTmeFeatureAnalysis = ref(false)
 const caseInfoExpanded = ref(true)
+const historyExpanded = ref(Boolean(route.query.historyScope))
 
 const zoomLevels = [0.5, 1, 4, 10, 20, 40, 80]
 const slidePixelSize = { width: 22200, height: 29670 }
@@ -180,7 +185,19 @@ const selectedCase = computed(() => {
   const id = selectedObject.value?.caseId || selectedObject.value?.caseName
   return id ? cases.value.find((item) => item.id === id) || null : null
 })
-const showCaseContext = computed(() => task.value?.objectType === 'Case' && Boolean(selectedCase.value))
+const showCaseContext = computed(() => (route.query.historyScope === 'case' || task.value?.objectType === 'Case') && Boolean(selectedCase.value))
+const historyScope = computed(() => route.query.historyScope === 'case' || task.value?.objectType === 'Case' ? 'case' : 'wsi')
+const analysisHistory = computed(() => {
+  if (historyScope.value === 'case' && selectedCase.value) {
+    return getCaseAnalysisHistory(selectedCase.value.id, tasks.value).filter((historyTask) => {
+      const objectIds = new Set(historyTask.objects.filter((item) => item.caseId === selectedCase.value?.id).map((item) => item.id))
+      return historyTask.models.some((run) => objectIds.has(run.objectId) && run.status === '分析完成')
+    })
+  }
+  return selectedObject.value
+    ? getWsiAnalysisHistory(selectedObject.value.id, tasks.value).filter((historyTask) => historyTask.models.some((run) => run.objectId === selectedObject.value?.id && run.status === '分析完成'))
+    : []
+})
 const selectedObjectIndex = computed(() => task.value?.objects.findIndex((item) => item.id === selectedObject.value?.id) ?? -1)
 const sparkSummary = computed(() => getSparkSlideSummary(selectedObjectIndex.value))
 const activeCountMarkers = computed(() => countMarkersByObject.value[selectedObject.value?.id || ''] || [])
@@ -253,7 +270,9 @@ const viewerScale = computed(() => zoomScale(zoom.value))
 
 watch(task, (value) => {
   if (!value) return
-  if (!value.objects.some((item) => item.id === selectedId.value)) selectedId.value = value.objects[0]?.id || ''
+  const requestedObject = typeof route.query.object === 'string' ? route.query.object : ''
+  if (requestedObject && value.objects.some((item) => item.id === requestedObject)) selectedId.value = requestedObject
+  else if (!value.objects.some((item) => item.id === selectedId.value)) selectedId.value = value.objects[0]?.id || ''
 }, { immediate: true })
 watch(runs, (value) => {
   if (!value.some((run) => run.modelId === activeResultModelId.value)) {
@@ -284,6 +303,20 @@ function runProgress(run: AnalysisModelRunRecord) {
 }
 function objectRuns(item: AnalysisTaskObjectRecord) {
   return task.value ? getObjectRuns(task.value, item.id) : []
+}
+function historyRuns(historyTask: AnalysisTaskRecord) {
+  if (historyScope.value === 'case' && selectedCase.value) {
+    const objectIds = new Set(historyTask.objects.filter((item) => item.caseId === selectedCase.value?.id).map((item) => item.id))
+    return historyTask.models.filter((run) => objectIds.has(run.objectId))
+  }
+  return historyTask.models.filter((run) => run.objectId === selectedObject.value?.id)
+}
+function openHistoryTask(historyTask: AnalysisTaskRecord) {
+  const currentObjectId = selectedObject.value?.id
+  const nextObject = historyTask.objects.find((item) => item.id === currentObjectId)
+    || (selectedCase.value ? historyTask.objects.find((item) => item.caseId === selectedCase.value?.id) : undefined)
+    || historyTask.objects[0]
+  router.push({ path: `/workbench/run/${historyTask.id}`, query: { object: nextObject?.id, historyScope: historyScope.value } })
 }
 function fileNameParts(name: string) {
   const tailLength = 12
@@ -696,7 +729,12 @@ async function toggleFullscreen() {
     </main>
 
     <aside class="workbench-results">
-      <header class="results-header"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><h2>分析结果</h2><p class="truncate" :title="selectedObject?.name">{{ selectedObject?.name }}</p></div><span>示例结果</span></div><div v-if="activeResultRun" class="active-result-summary"><div class="min-w-0"><b>{{ activeResultRun.name }}</b><small>{{ getModelDefinition(activeResultRun.modelId).desc }}</small></div><em>{{ activeResultRun.status }} · {{ runProgress(activeResultRun) }}%</em></div></header>
+      <header class="results-header"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><h2>分析结果</h2><p class="truncate" :title="selectedObject?.name">{{ selectedObject?.name }}</p></div><span>示例结果</span></div><div v-if="activeResultRun" class="active-result-summary"><div class="min-w-0"><b>{{ activeResultRun.name }}</b><small>{{ getModelDefinition(activeResultRun.modelId).desc }}</small></div><em>{{ activeResultRun.status }} · {{ runProgress(activeResultRun) }}%</em></div><button v-if="analysisHistory.length" class="result-history-toggle" :aria-expanded="historyExpanded" @click="historyExpanded=!historyExpanded"><span><History :size="14" /><b>分析记录</b><small>{{ historyScope === 'case' ? `当前 Case · ${analysisHistory.length} 次` : `当前 WSI · ${analysisHistory.length} 次` }}</small></span><ChevronDown :class="historyExpanded&&'open'" :size="15" /></button></header>
+      <section v-if="historyExpanded && analysisHistory.length" class="analysis-history" aria-label="分析记录时间轴">
+        <button v-for="(historyTask,index) in analysisHistory" :key="historyTask.id" :class="historyTask.id===task.id&&'active'" @click="openHistoryTask(historyTask)">
+          <i><span /></i><div><div><b>{{ index===0 ? '最近一次分析' : historyTask.createdAt }}</b><em :class="statusClass(historyTask.status)">{{ historyTask.status }}</em></div><p>{{ historyRuns(historyTask).map(run=>run.name).join('、') || '未配置模型' }}</p><small>{{ historyTask.createdAt }} · {{ getTaskDisplayName(historyTask) }}</small></div>
+        </button>
+      </section>
       <nav v-if="runs.length > 1" class="result-model-switcher" aria-label="分析结果模型"><button v-for="run in runs" :key="run.id" :class="activeResultRun?.modelId === run.modelId && 'active'" @click="selectResultModel(run.modelId)"><span>{{ run.name }}</span><small>{{ run.status }} · {{ runProgress(run) }}%</small></button></nav>
       <div v-if="!activeResultRun" class="results-empty"><BarChart3 :size="24" /><b>尚未选择分析模型</b><p>在左侧为当前 WSI 选择模型后，这里会分别显示各模型结果。</p></div>
       <template v-else>
@@ -782,6 +820,7 @@ async function toggleFullscreen() {
 .wsi-file-name{display:flex;min-width:0;max-width:100%;align-items:baseline;color:inherit;font-weight:600;cursor:pointer;outline:none}.wsi-file-name:hover,.wsi-file-name:focus-visible{color:#e8b8f8}.wsi-file-name span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wsi-file-name em{flex:none;font-style:normal;white-space:nowrap}.wsi-file-name-tip{position:fixed;z-index:90;width:max-content;max-width:min(420px,calc(100vw - 24px));border:1px solid rgb(255 255 255 / .12);border-radius:5px;background:#292b32;padding:7px 9px;color:#e2e8f0;box-shadow:0 10px 28px rgb(0 0 0 / .42);font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11px;line-height:1.45;overflow-wrap:anywhere;pointer-events:none}.object-progress-summary{position:relative;min-height:31px}.model-summary{min-width:0;overflow:hidden;color:#cbd5e1;font-weight:600;text-overflow:ellipsis;white-space:nowrap}.model-summary.empty{color:#64748b;font-weight:500}.model-summary.multiple{display:flex;align-items:center;gap:3px;color:#d292f4}.model-summary.multiple:hover,.model-summary.multiple:focus-visible{color:#edc8fa;outline:none}.model-progress-details{position:absolute;left:-5px;right:-5px;top:calc(100% + 5px);z-index:60;display:none;gap:9px;border:1px solid rgb(255 255 255 / .12);border-radius:6px;background:rgb(17 18 23 / .98);padding:10px;box-shadow:0 16px 36px rgb(0 0 0 / .52)}.model-progress-details::before{position:absolute;right:0;bottom:100%;left:0;height:6px;content:''}.object-progress-summary.has-multiple-models:hover .model-progress-details,.object-progress-summary.has-multiple-models:focus-within .model-progress-details{display:grid}.model-progress-title{color:#cbd5e1;font-size:10px;font-weight:600}.model-progress-details>div>div{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:9px}.model-progress-details span{min-width:0;overflow:hidden;color:#b7c0ce;text-overflow:ellipsis;white-space:nowrap}.model-progress-details small{flex:none;color:#64748b}.model-progress-details i{display:block;height:3px;margin-top:4px;overflow:hidden;border-radius:2px;background:#30323a}.model-progress-details i b{display:block;height:100%;border-radius:2px;background:#b45ed4}
 .case-context{flex:none;border-bottom:1px solid rgb(255 255 255 / .08);background:#191a20;padding:9px}.case-context-toggle{display:flex;width:100%;align-items:center;justify-content:space-between;border-radius:6px;padding:7px 8px;text-align:left}.case-context-toggle:hover{background:rgb(255 255 255 / .04)}.case-context-toggle span,.case-context-toggle b,.case-context-toggle small{display:block;min-width:0}.case-context-toggle b{color:#d8dee9;font-size:13px}.case-context-toggle small{margin-top:3px;color:#d292f4;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px}.case-context-toggle svg{color:#64748b;transition:transform .15s}.case-context-toggle svg.open{transform:rotate(180deg)}.case-context-body{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:5px;border:1px solid rgb(255 255 255 / .07);border-radius:6px;background:#15161b;padding:10px}.case-context-body>div{min-width:0}.case-context-body .wide{grid-column:1/-1}.case-context-body span,.case-context-body b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.case-context-body span{color:#7e8ca0;font-size:10px}.case-context-body b{margin-top:3px;color:#cbd5e1;font-size:11px;font-weight:500}.case-context-body>button{display:flex;grid-column:1/-1;align-items:center;gap:5px;border-top:1px solid rgb(255 255 255 / .06);padding-top:9px;color:#d292f4;font-size:10.5px;text-align:left}.case-context-body>button:hover{color:#edc8fa}
 .active-result-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;border-top:1px solid rgb(255 255 255 / .07);padding-top:11px}.active-result-summary b,.active-result-summary small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.active-result-summary small{margin-top:2px}.active-result-summary em{flex:none;color:#8490a3;font-size:10px;font-style:normal}.result-model-switcher{display:grid;flex:none;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:6px;border-bottom:1px solid rgb(255 255 255 / .08);padding:8px 10px;background:#191a20}.result-model-switcher button{min-width:0;height:48px;border:1px solid rgb(255 255 255 / .08);border-radius:5px;padding:7px 9px;text-align:left}.result-model-switcher span,.result-model-switcher small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.result-model-switcher span{color:#b7c0ce;font-size:11px;font-weight:600}.result-model-switcher small{margin-top:3px;color:#64748b;font-size:9px}.result-model-switcher button.active{border-color:rgb(143 53 183 / .72);background:rgb(143 53 183 / .18)}.result-model-switcher button.active span{color:#e9c4f8}.result-model-switcher button.active small{color:#b886ca}.results-empty{display:grid;min-height:0;flex:1;place-content:center;justify-items:center;padding:24px;color:#64748b;text-align:center}.results-empty b{margin-top:10px;color:#cbd5e1;font-size:13px}.results-empty p{margin-top:5px;max-width:240px;font-size:11px;line-height:1.7}
+.result-history-toggle{display:flex;width:100%;height:39px;align-items:center;justify-content:space-between;margin-top:11px;border:1px solid rgb(255 255 255 / .07);border-radius:6px;background:#191a20;padding:0 9px;text-align:left}.result-history-toggle:hover{border-color:rgb(143 53 183 / .38);background:rgb(143 53 183 / .07)}.result-history-toggle>span{display:flex;min-width:0;align-items:center;gap:6px}.result-history-toggle svg{flex:none;color:#b86fd7}.result-history-toggle b{color:#cbd5e1;font-size:11px}.result-history-toggle small{overflow:hidden;color:#718096;font-size:9px;text-overflow:ellipsis;white-space:nowrap}.result-history-toggle>svg{color:#64748b;transition:transform .15s}.result-history-toggle>svg.open{transform:rotate(180deg)}.analysis-history{max-height:255px;flex:none;overflow-y:auto;border-bottom:1px solid rgb(255 255 255 / .08);background:#17181d;padding:7px 10px}.analysis-history>button{display:grid;width:100%;grid-template-columns:16px minmax(0,1fr);gap:7px;padding:7px 4px;text-align:left}.analysis-history>button>i{position:relative;display:flex;justify-content:center}.analysis-history>button>i::after{position:absolute;top:13px;bottom:-14px;width:1px;background:#343642;content:''}.analysis-history>button:last-child>i::after{display:none}.analysis-history>button>i>span{position:relative;z-index:1;width:8px;height:8px;margin-top:4px;border:2px solid #5e6270;border-radius:50%;background:#17181d}.analysis-history>button.active>i>span{border-color:#c46ce6;background:#9c36c7;box-shadow:0 0 0 3px rgb(156 54 199 / .12)}.analysis-history>button>div{min-width:0}.analysis-history>button>div>div{display:flex;align-items:center;justify-content:space-between;gap:7px}.analysis-history b{overflow:hidden;color:#c3ccd8;font-size:10.5px;text-overflow:ellipsis;white-space:nowrap}.analysis-history em{flex:none;border:1px solid;border-radius:8px;padding:2px 5px;font-size:8px;font-style:normal}.analysis-history p{margin-top:3px;overflow:hidden;color:#8d99aa;font-size:9.5px;text-overflow:ellipsis;white-space:nowrap}.analysis-history small{display:block;margin-top:3px;overflow:hidden;color:#566477;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:8px;text-overflow:ellipsis;white-space:nowrap}.analysis-history>button.active>div{border-radius:5px;background:rgb(143 53 183 / .08);padding:5px 6px;margin:-5px -6px}.analysis-history>button:hover>div{color:#e8b8f8}
 .tme-analysis-entry{border-color:rgb(88 112 210 / .5);background:rgb(64 89 190 / .12);color:#b9c7ff}.tme-analysis-entry:hover{border-color:#647fe4;background:rgb(64 89 190 / .24);color:#e0e7ff}
 .metric-grid>div,.feature-summary>div{min-width:0}.metric-grid span,.feature-summary span,.metric-grid b,.feature-summary b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.quality-list{margin-top:8px}.quality-list>div{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgb(255 255 255 / .06);padding:8px 0;font-size:11px}.quality-list dt{color:#8490a3}.quality-list dd{color:#d8dee9}.classification-list{margin-top:9px}.classification-list>div{display:grid;grid-template-columns:minmax(0,1fr) 72px 34px;align-items:center;gap:8px;border-bottom:1px solid rgb(255 255 255 / .06);padding:8px 0;font-size:10px}.classification-list span{overflow:hidden;color:#9aa6b8;text-overflow:ellipsis;white-space:nowrap}.classification-list strong{font-weight:500;text-align:right}.classification-list small{color:#64748b;text-align:right}
 .annotation-flyout{width:350px}.annotation-panel{min-height:0;overflow-y:auto;padding:12px}.annotation-master{width:100%;height:34px;border:1px solid #485a9d;border-radius:5px;background:#22283b;color:#aebbe9;font-size:12px;font-weight:600}.annotation-master.active{border-color:#5477e4;background:#355ec5;color:white}.annotation-opacity{display:grid;height:38px;grid-template-columns:54px minmax(0,1fr) 38px;align-items:center;gap:7px;color:#9aa6b8;font-size:10px}.annotation-opacity input{width:100%;accent-color:#4d79e6}.annotation-opacity b{color:#cbd5e1;text-align:right}.annotation-global-actions,.annotation-group-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px}.annotation-global-actions button,.annotation-group-actions button{height:28px;border:1px solid rgb(255 255 255 / .09);border-radius:4px;background:#252733;color:#9aa6b8;font-size:10px}.annotation-global-actions button:hover,.annotation-group-actions button:hover{border-color:#5069c4;color:#d9e0ef}.annotation-quant{margin-top:12px;border-top:1px solid rgb(255 255 255 / .08);padding-top:11px}.annotation-quant header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}.annotation-quant header b,.annotation-quant header small{display:block}.annotation-quant header b{font-size:12px}.annotation-quant header small{margin-top:3px;color:#6f7b8e;font-size:9px;line-height:1.45}.annotation-quant header em{flex:none;border-radius:8px;background:rgb(30 147 187 / .16);padding:3px 6px;color:#64cee8;font-size:8px;font-style:normal}.annotation-quant>button{display:flex;width:100%;height:32px;align-items:center;justify-content:center;gap:6px;margin-top:8px;border:1px solid #5071d9;border-radius:4px;background:#315fac;color:white;font-size:10px}.annotation-quant>button.active{border-color:#d08ced;background:#714088}.annotation-group{margin-top:12px}.annotation-group>header{display:flex;height:32px;align-items:center;justify-content:space-between;border:1px solid #3e55a4;border-radius:4px;background:#212641;padding:0 8px}.annotation-group>header b{font-size:11px}.annotation-group>header button{color:#b8c6ee;font-size:9px}.annotation-group-actions{margin-top:5px}.annotation-label-list{margin-top:6px;border:1px solid rgb(255 255 255 / .07);border-radius:5px;background:#17181d}.annotation-label-list label{display:grid;min-height:32px;grid-template-columns:14px 19px minmax(0,1fr) 7px 34px;align-items:center;gap:6px;border-bottom:1px solid rgb(255 255 255 / .06);padding:4px 6px}.annotation-label-list label:last-child{border-bottom:0}.annotation-label-list label:hover{background:rgb(81 103 177 / .09)}.annotation-label-list input[type=checkbox]{accent-color:#4f79e4}.annotation-label-list input[type=color]{width:18px;height:18px;overflow:hidden;border:1px solid #596274;border-radius:3px;background:transparent;padding:1px}.annotation-label-list span{overflow:hidden;color:#c0c8d5;font-size:9px;text-overflow:ellipsis;white-space:nowrap}.annotation-label-list i{width:7px;height:7px;border-radius:50%}.annotation-label-list em{border:1px solid rgb(255 255 255 / .08);border-radius:3px;padding:2px 3px;color:#7f8a9e;font-size:8px;font-style:normal;text-align:center}.region-annotation-layer{position:absolute;inset:0;z-index:2;overflow:hidden;pointer-events:none}.region-annotation-layer i{position:absolute;transform-origin:center;border:1px solid rgb(255 255 255 / .24);border-radius:42% 58% 48% 52% / 53% 44% 56% 47%;mix-blend-mode:multiply;filter:saturate(1.15)}

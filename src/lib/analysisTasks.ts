@@ -95,6 +95,13 @@ export interface ProjectTaskWsiInput {
   site?: string;
 }
 
+export interface ProjectTaskInput {
+  projectId: string;
+  projectName: string;
+  cases: ProjectTaskCaseInput[];
+  wsis: ProjectTaskWsiInput[];
+}
+
 const STORAGE_KEY = 'huggingpath.analysisTasks.v1';
 const PROGRESS_STEP = 7;
 const STAIN_SEQUENCE = ['H&E', 'Ki-67', 'HER2', 'PAS'];
@@ -471,6 +478,33 @@ export function readAnalysisTasks(): AnalysisTaskRecord[] {
   return safeParseTasks(window.localStorage.getItem(STORAGE_KEY));
 }
 
+function analysisTimeValue(task: AnalysisTaskRecord) {
+  const parsed = new Date(task.createdAt.replace(' ', 'T')).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+export function getWsiAnalysisHistory(
+  wsiId: string,
+  tasks: AnalysisTaskRecord[] = readAnalysisTasks(),
+) {
+  const normalizedWsiId = wsiId.trim();
+  if (!normalizedWsiId) return [];
+  return tasks
+    .filter((task) => task.objects.some((object) => object.id === normalizedWsiId) && task.models.some((run) => run.objectId === normalizedWsiId))
+    .sort((a, b) => analysisTimeValue(b) - analysisTimeValue(a));
+}
+
+export function getCaseAnalysisHistory(
+  caseId: string,
+  tasks: AnalysisTaskRecord[] = readAnalysisTasks(),
+) {
+  const normalizedCaseId = caseId.trim();
+  if (!normalizedCaseId) return [];
+  return tasks
+    .filter((task) => task.objects.some((object) => object.caseId === normalizedCaseId) && task.models.length > 0)
+    .sort((a, b) => analysisTimeValue(b) - analysisTimeValue(a));
+}
+
 export function countCaseAnalysisTasks(
   caseId: string,
   tasks: AnalysisTaskRecord[] = readAnalysisTasks(),
@@ -478,9 +512,10 @@ export function countCaseAnalysisTasks(
   const normalizedCaseId = caseId.trim();
   if (!normalizedCaseId) return 0;
 
-  return tasks.filter((task) =>
-    task.objects.some((object) => object.caseId === normalizedCaseId),
-  ).length;
+  return getCaseAnalysisHistory(normalizedCaseId, tasks).filter((task) => {
+    const caseObjectIds = new Set(task.objects.filter((object) => object.caseId === normalizedCaseId).map((object) => object.id));
+    return task.models.some((run) => caseObjectIds.has(run.objectId) && run.status === '分析完成');
+  }).length;
 }
 
 export function countWsiSuccessfulAnalyses(
@@ -490,12 +525,9 @@ export function countWsiSuccessfulAnalyses(
   const normalizedWsiId = wsiId.trim();
   if (!normalizedWsiId) return 0;
 
-  return tasks.reduce(
-    (count, task) => count + task.models.filter(
-      (run) => run.objectId === normalizedWsiId && run.status === '分析完成',
-    ).length,
-    0,
-  );
+  return getWsiAnalysisHistory(normalizedWsiId, tasks).filter((task) =>
+    task.models.some((run) => run.objectId === normalizedWsiId && run.status === '分析完成'),
+  ).length;
 }
 
 export function writeAnalysisTasks(tasks: AnalysisTaskRecord[]) {
@@ -786,6 +818,25 @@ export function startAnalysisTask(taskId: string) {
   return next.find((task) => task.id === taskId) || null;
 }
 
+export function configureAndStartAnalysisTask(taskId: string, assignments: Record<string, string[]>) {
+  const configured = updateAnalysisTask(taskId, (task) => {
+    if (task.status !== '待分析' || task.modelLocked) return task;
+
+    const objects = task.objects.map((object) => ({
+      ...object,
+      modelIds: [...new Set(assignments[object.id] || [])]
+        .filter((modelId) => AVAILABLE_ANALYSIS_MODEL_IDS.has(modelId))
+        .filter((modelId) => isModelCompatible(getModelDefinition(modelId), object.stain)),
+    }));
+    const models = rebuildRuns(objects);
+    const next = { ...task, objects, models };
+    return { ...next, objects: syncObjectStatuses(next, models, '待分析') };
+  });
+
+  if (!configured || configured.objects.some((object) => object.modelIds.length === 0)) return configured;
+  return startAnalysisTask(taskId);
+}
+
 export function tickAnalysisTasks(step = PROGRESS_STEP) {
   const tasks = readAnalysisTasks();
   if (!tasks.length) return [];
@@ -1014,23 +1065,29 @@ function buildTask(args: {
   caseCount?: number;
   projectCount?: number;
 }) {
+  const seenObjectIds = new Set<string>();
+  const objects = args.objects.filter((object) => {
+    if (seenObjectIds.has(object.id)) return false;
+    seenObjectIds.add(object.id);
+    return true;
+  });
   const id = newId('task');
   const createdAt = nowText();
   const task: AnalysisTaskRecord = {
     id,
     taskNumber: buildTaskNumber(id, createdAt),
-    taskName: args.taskName || buildTaskDisplayName(args.objects, args),
+    taskName: args.taskName || buildTaskDisplayName(objects, args),
     sourceType: args.sourceType,
     sourceLabel: args.sourceLabel,
     objectType: args.objectType,
-    objectCount: objectCountText(args.objects.length),
+    objectCount: objectCountText(objects.length),
     status: '待分析',
     createdAt,
     modelLocked: args.modelLocked,
     caseCount: args.caseCount,
     projectCount: args.projectCount,
-    models: rebuildRuns(args.objects),
-    objects: args.objects,
+    models: rebuildRuns(objects),
+    objects,
   };
   return saveAnalysisTask(task);
 }
@@ -1189,12 +1246,7 @@ export function createTaskFromCase(args: {
   return createTaskFromCases({ cases: [args] });
 }
 
-export function createTaskFromProject(args: {
-  projectId: string;
-  projectName: string;
-  cases: ProjectTaskCaseInput[];
-  wsis: ProjectTaskWsiInput[];
-}) {
+function objectsFromProjectTask(args: ProjectTaskInput) {
   const caseIds = new Set(args.cases.flatMap((item) => [item.id, item.sampleId]));
 
   const caseObjects = args.cases.flatMap((caseItem) => {
@@ -1229,15 +1281,29 @@ export function createTaskFromProject(args: {
       projectName: args.projectName,
     }));
 
+  return [...caseObjects, ...standaloneObjects];
+}
+
+export function createTaskFromProjects(args: { projects: ProjectTaskInput[] }) {
+  const projects = args.projects.filter((project) => Boolean(project.projectId));
+  if (!projects.length) throw new Error('至少需要选择 1 个研究项目');
+
+  const objects = projects.flatMap(objectsFromProjectTask);
+  if (!objects.length) throw new Error('所选研究项目中没有可分析的 WSI');
+
   return buildTask({
     sourceType: 'project',
     sourceLabel: '研究项目管理',
     objectType: '研究项目',
     modelLocked: false,
-    objects: [...caseObjects, ...standaloneObjects],
-    caseCount: args.cases.length,
-    projectCount: 1,
+    objects,
+    caseCount: new Set(objects.map((object) => object.caseId).filter(Boolean)).size,
+    projectCount: projects.length,
   });
+}
+
+export function createTaskFromProject(args: ProjectTaskInput) {
+  return createTaskFromProjects({ projects: [args] });
 }
 
 export function stopAnalysisObject(taskId: string, objectId: string) {

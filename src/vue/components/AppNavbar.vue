@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { Check, ChevronDown, CloudUpload, Download, LogOut, Menu, Package, Plug, Search, ShieldCheck, Trash2, UserCircle, X } from '@lucide/vue'
+import { Check, ChevronDown, CircleAlert, CloudUpload, Download, LogOut, Menu, Package, Plug, Search, ShieldCheck, UserCircle, X } from '@lucide/vue'
 import { canAccessAdmin, hasDirectoryPermission, signOut, type Permission } from '@/lib/accountDirectory'
 import { useDirectory } from '../composables/useDirectory'
 import { useUploadTransfers } from '../composables/useUploadTransfers'
 import AppLogo from './AppLogo.vue'
+import TransferQuickPopover from './TransferQuickPopover.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -14,14 +15,16 @@ const scrolled = ref(false)
 const mobileOpen = ref(false)
 const userMenuOpen = ref(false)
 const uploadToolOpen = ref(false)
-const transferPanelOpen = ref(false)
-const { transfers, pendingCount, allComplete, clearCompleted } = useUploadTransfers()
+const transferCenterOpen = ref(false)
+const { pendingCount, failedCount, canceledCount, allComplete } = useUploadTransfers()
+const transferExceptionCount = computed(() => failedCount.value + canceledCount.value)
 
 const workbenchLinks: { label: string; path: string; permission: Permission }[] = [
   { label: 'WSI 管理', path: '/workbench/wsi', permission: 'wsi:manage' },
   { label: 'Case 管理', path: '/workbench/cases', permission: 'cases:manage' },
   { label: '研究项目管理', path: '/workbench/projects', permission: 'projects:manage' },
   { label: '分析任务', path: '/workbench/tasks', permission: 'analysis:manage' },
+  { label: '传输队列', path: '/workbench/transfers', permission: 'wsi:manage' },
 ]
 
 const visibleWorkbenchLinks = computed(() => workbenchLinks.filter((item) => hasDirectoryPermission(session.value, item.permission)))
@@ -34,7 +37,7 @@ const handleKeydown = (event: KeyboardEvent) => {
   mobileOpen.value = false
   userMenuOpen.value = false
   uploadToolOpen.value = false
-  transferPanelOpen.value = false
+  transferCenterOpen.value = false
 }
 
 onMounted(() => {
@@ -48,7 +51,7 @@ onUnmounted(() => {
 watch(() => route.fullPath, () => {
   mobileOpen.value = false
   userMenuOpen.value = false
-  transferPanelOpen.value = false
+  transferCenterOpen.value = false
 })
 
 function goLogin() {
@@ -94,17 +97,12 @@ function isActive(path: string) {
         </label>
         <button class="icon-button" title="上传工具下载" @click="uploadToolOpen = true"><Plug :size="20" /></button>
         <div class="relative">
-          <button :class="['icon-button relative',transferPanelOpen&&'bg-white/[0.06] text-white']" title="传输队列" aria-label="传输队列" @click="transferPanelOpen=!transferPanelOpen;userMenuOpen=false">
+          <button :class="['icon-button relative',transferCenterOpen&&'bg-white/[0.06] text-white']" title="传输任务" aria-label="快速查看传输任务" @click="transferCenterOpen=!transferCenterOpen;userMenuOpen=false">
             <CloudUpload :size="20" />
             <span v-if="pendingCount" class="transfer-count">{{ pendingCount > 99 ? '99+' : pendingCount }}</span>
+            <span v-else-if="transferExceptionCount" class="transfer-failed"><CircleAlert :size="9" :stroke-width="3" /></span>
             <span v-else-if="allComplete" class="transfer-complete"><Check :size="9" :stroke-width="3" /></span>
           </button>
-          <section v-if="transferPanelOpen" class="transfer-panel">
-            <header><div><h2>传输队列</h2><p>{{ pendingCount ? `${pendingCount} 项正在传输` : transfers.length ? '本次传输已完成' : '暂无传输任务' }}</p></div><button v-if="transfers.some(item=>item.status==='已完成')" title="清除已完成" @click="clearCompleted"><Trash2 :size="15" /></button></header>
-            <div v-if="!transfers.length" class="transfer-empty"><CloudUpload :size="24" /><span>选择 WSI 上传后，可在任意页面查看进度。</span></div>
-            <div v-else class="transfer-list"><article v-for="item in transfers" :key="item.id"><div><b :title="item.wsi.fileName">{{ item.wsi.fileName }}</b><span>{{ item.wsi.size }} · {{ item.wsi.boundCase === '未绑定' ? '未绑定 Case' : item.wsi.boundCase }}</span></div><em :class="item.status==='已完成'&&'done'">{{ item.status === '已完成' ? '已完成' : `${item.progress}%` }}</em><i><b :class="item.status==='已完成'&&'done'" :style="{width:`${item.progress}%`}" /></i></article></div>
-            <footer v-if="transfers.length"><span><i :class="pendingCount?'active':'done'" />{{ pendingCount ? '传输进行中，可继续使用其他功能' : '全部上传成功' }}</span></footer>
-          </section>
         </div>
         <button v-if="!session" class="h-9 rounded-lg bg-[#8f35b7] px-4 text-sm font-medium text-white hover:bg-[#a64ed0]" @click="goLogin">登录</button>
         <div v-else class="relative">
@@ -147,6 +145,7 @@ function isActive(path: string) {
       </section>
     </div>
   </Teleport>
+  <Teleport to="body"><TransferQuickPopover v-if="transferCenterOpen" @close="transferCenterOpen=false" /></Teleport>
 </template>
 
 <style scoped>
@@ -154,7 +153,7 @@ function isActive(path: string) {
 .nav-link:hover, .nav-active { background: rgb(255 255 255 / 0.08); color: #e2e8f0; }
 .icon-button { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 8px; color: #94a3b8; }
 .icon-button:hover { background: rgb(255 255 255 / 0.06); color: #e2e8f0; }
-.transfer-count{position:absolute;right:-4px;top:-4px;display:grid;min-width:17px;height:17px;place-items:center;border:2px solid #0f1014;border-radius:9px;background:#ef4444;padding:0 4px;color:white;font-size:9px;font-weight:700}.transfer-complete{position:absolute;right:-2px;top:-2px;display:grid;width:15px;height:15px;place-items:center;border:2px solid #0f1014;border-radius:50%;background:#22c55e;color:#07160d}.transfer-panel{position:absolute;right:0;top:44px;z-index:70;width:min(380px,calc(100vw - 24px));overflow:hidden;border:1px solid rgb(255 255 255 / .11);border-radius:9px;background:#202126;box-shadow:0 22px 54px rgb(0 0 0 / .55)}.transfer-panel>header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgb(255 255 255 / .07);padding:13px 14px}.transfer-panel h2{color:#e2e8f0;font-size:14px;font-weight:600}.transfer-panel header p{margin-top:2px;color:#64748b;font-size:10px}.transfer-panel header button{color:#7f8a9e}.transfer-empty{display:grid;min-height:150px;place-content:center;justify-items:center;gap:10px;padding:20px;color:#64748b;text-align:center;font-size:11px}.transfer-list{max-height:330px;overflow-y:auto;padding:6px}.transfer-list article{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;border-bottom:1px solid rgb(255 255 255 / .06);padding:10px}.transfer-list article:last-child{border-bottom:0}.transfer-list article>div{min-width:0}.transfer-list b,.transfer-list span{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.transfer-list article>div>b{color:#d8dee9;font-size:11px}.transfer-list span{margin-top:3px;color:#64748b;font-size:9px}.transfer-list em{color:#d292f4;font-size:10px;font-style:normal}.transfer-list em.done{color:#65d6a0}.transfer-list article>i{grid-column:1/-1;height:4px;overflow:hidden;border-radius:2px;background:#34363e}.transfer-list article>i>b{height:100%;border-radius:2px;background:#9c36c7}.transfer-list article>i>b.done{background:#22a66f}.transfer-panel>footer{border-top:1px solid rgb(255 255 255 / .07);padding:10px 14px;color:#7f8a9e;font-size:9px}.transfer-panel>footer span{display:flex;align-items:center;gap:6px}.transfer-panel>footer i{width:7px;height:7px;border-radius:50%;background:#9c36c7;box-shadow:0 0 0 3px rgb(156 54 199 / .12)}.transfer-panel>footer i.done{background:#22c55e;box-shadow:0 0 0 3px rgb(34 197 94 / .12)}
+.transfer-count{position:absolute;right:-4px;top:-4px;display:grid;min-width:17px;height:17px;place-items:center;border:2px solid #0f1014;border-radius:9px;background:#ef4444;padding:0 4px;color:white;font-size:9px;font-weight:700}.transfer-complete,.transfer-failed{position:absolute;right:-2px;top:-2px;display:grid;width:15px;height:15px;place-items:center;border:2px solid #0f1014;border-radius:50%}.transfer-complete{background:#22c55e;color:#07160d}.transfer-failed{background:#ef4444;color:white}
 .menu-button { display: flex; width: 100%; height: 36px; align-items: center; gap: 8px; border-radius: 6px; padding: 0 12px; color: #94a3b8; font-size: 14px; }
 .menu-button:hover { background: rgb(255 255 255 / 0.06); color: #e2e8f0; }
 .mobile-link { border-radius: 6px; padding: 10px 12px; color: #94a3b8; font-size: 14px; }
