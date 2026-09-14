@@ -19,6 +19,8 @@ const routes: RouteRecordRaw[] = [
   { path: '/cases/:caseId', name: 'case-detail-public', component: () => import('../views/PublicCaseDetailView.vue') },
   { path: '/datasets', name: 'datasets', component: () => import('../views/DatasetsView.vue') },
   { path: '/about', name: 'about', component: () => import('../views/AboutView.vue') },
+  { path: '/assistant', name: 'assistant', component: () => import('../views/AssistantView.vue'), meta: protectedRoute() },
+  { path: '/assistant/chat', name: 'assistant-chat', component: () => import('../views/AssistantChatView.vue'), meta: protectedRoute() },
   { path: '/user-center', name: 'user-center', component: () => import('../views/UserCenterView.vue'), meta: protectedRoute() },
   { path: '/admin', name: 'admin', component: () => import('../views/AdminView.vue'), meta: protectedRoute(undefined, true) },
   { path: '/workbench', redirect: '/workbench/tasks' },

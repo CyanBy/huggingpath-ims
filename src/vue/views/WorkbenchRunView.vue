@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
+import { Sparkles,
   ArrowLeft,
   BarChart3,
   ChevronDown,
@@ -414,6 +414,15 @@ function stopAll() {
   stopAnalysisTask(task.value.id)
   refresh()
 }
+/** 跳转到 AI 助手并挂入当前切片作为对话对象 */
+function openAiChat() {
+  if (!selectedObject.value) return
+  router.push({
+    path: '/assistant/chat',
+    query: { attachKind: 'wsi', attachId: selectedObject.value.id, attachLabel: selectedObject.value.name },
+  })
+}
+
 function selectObject(objectId: string) {
   if (viewerLayout.value !== '1x1') {
     const ids = [...splitObjectIds.value]
@@ -729,7 +738,7 @@ async function toggleFullscreen() {
     </main>
 
     <aside class="workbench-results">
-      <header class="results-header"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><h2>分析结果</h2><p class="truncate" :title="selectedObject?.name">{{ selectedObject?.name }}</p></div><span>示例结果</span></div><div v-if="activeResultRun" class="active-result-summary"><div class="min-w-0"><b>{{ activeResultRun.name }}</b><small>{{ getModelDefinition(activeResultRun.modelId).desc }}</small></div><em>{{ activeResultRun.status }} · {{ runProgress(activeResultRun) }}%</em></div><button v-if="analysisHistory.length" class="result-history-toggle" :aria-expanded="historyExpanded" @click="historyExpanded=!historyExpanded"><span><History :size="14" /><b>分析记录</b><small>{{ historyScope === 'case' ? `当前 Case · ${analysisHistory.length} 次` : `当前 WSI · ${analysisHistory.length} 次` }}</small></span><ChevronDown :class="historyExpanded&&'open'" :size="15" /></button></header>
+      <header class="results-header"><div class="flex items-start justify-between gap-3"><div class="min-w-0"><h2>分析结果</h2><p class="truncate" :title="selectedObject?.name">{{ selectedObject?.name }}</p></div><button v-if="selectedObject" class="ai-chat-btn" title="就当前切片发起 AI 对话" @click="openAiChat"><Sparkles :size="14" />AI 对话</button></div><div v-if="activeResultRun" class="active-result-summary"><div class="min-w-0"><b>{{ activeResultRun.name }}</b><small>{{ getModelDefinition(activeResultRun.modelId).desc }}</small></div><em>{{ activeResultRun.status }} · {{ runProgress(activeResultRun) }}%</em></div><button v-if="analysisHistory.length" class="result-history-toggle" :aria-expanded="historyExpanded" @click="historyExpanded=!historyExpanded"><span><History :size="14" /><b>分析记录</b><small>{{ historyScope === 'case' ? `当前 Case · ${analysisHistory.length} 次` : `当前 WSI · ${analysisHistory.length} 次` }}</small></span><ChevronDown :class="historyExpanded&&'open'" :size="15" /></button></header>
       <section v-if="historyExpanded && analysisHistory.length" class="analysis-history" aria-label="分析记录时间轴">
         <button v-for="(historyTask,index) in analysisHistory" :key="historyTask.id" :class="historyTask.id===task.id&&'active'" @click="openHistoryTask(historyTask)">
           <i><span /></i><div><div><b>{{ index===0 ? '最近一次分析' : historyTask.createdAt }}</b><em :class="statusClass(historyTask.status)">{{ historyTask.status }}</em></div><p>{{ historyRuns(historyTask).map(run=>run.name).join('、') || '未配置模型' }}</p><small>{{ historyTask.createdAt }} · {{ getTaskDisplayName(historyTask) }}</small></div>
@@ -828,4 +837,8 @@ async function toggleFullscreen() {
 .result-tabs.two-tabs{grid-template-columns:repeat(2,1fr)}.tme-result-toolbox .feature-analysis-button{grid-column:1/-1;justify-content:center}
 .merged-annotation-card{margin-top:12px;overflow:hidden;border:1px solid rgb(255 255 255 / .08);border-radius:12px;background:#202126}.merged-annotation-card>header{display:flex;height:52px;align-items:center;justify-content:space-between;padding:0 12px}.merged-annotation-card h3{font-size:14px;font-weight:600}.annotation-group-heading>div{display:flex;align-items:center;gap:8px}.annotation-group-heading span{color:#748095;font-size:11.5px}.annotation-group-heading b{color:#d292f4;font-size:11.5px;font-weight:500}.annotation-switch{position:relative;width:40px;height:22px;flex:none;border-radius:999px;background:#444650;transition:background .16s}.annotation-switch i{position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#f8fafc;box-shadow:0 1px 3px rgb(0 0 0 / .45);transition:transform .16s}.annotation-switch.active{background:#9c36c7}.annotation-switch.active i{transform:translateX(18px)}.annotation-switch.small{width:38px;height:22px}.annotation-switch.small.active i{transform:translateX(16px)}.merged-opacity{display:grid;grid-template-columns:1fr auto;gap:7px;padding:0 12px 13px;color:#8490a3;font-size:12px}.merged-opacity b{color:#d292f4;font-weight:500}.merged-opacity input{grid-column:1/-1}.group-opacity{display:block;border-top:1px solid rgb(255 255 255 / .05);padding:0 12px 10px}.group-opacity span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}.merged-opacity input,.group-opacity input,.label-opacity{width:100%;accent-color:#9c36c7}.merged-annotation-list{border-top:1px solid rgb(255 255 255 / .07);padding:4px 12px 8px}.annotation-class-row{padding:8px 0 5px}.annotation-class-row>div{display:grid;grid-template-columns:38px 9px minmax(0,1fr) 66px 66px;align-items:center;gap:8px}.annotation-color{width:7px;height:7px;border-radius:50%}.annotation-class-row span{min-width:0;overflow:hidden;color:#aeb8c8;font-size:12px;text-overflow:ellipsis;white-space:nowrap}.annotation-class-row strong{color:#e2e8f0;font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;font-weight:600;text-align:right}.label-opacity{min-width:0}.annotation-count-track{display:block;height:5px;margin-top:5px;overflow:hidden;border-radius:2px;background:#34363e}.annotation-count-track b{display:block;height:100%;border-radius:2px}.merged-annotation-card input[type=range]{height:14px;cursor:pointer}
 @media (max-width:1500px){.workbench-shell{grid-template-columns:292px minmax(0,1fr) 350px}.viewer-toolbar-primary,.viewer-toolbar-secondary{padding-inline:8px}.tool-toggle{padding-inline:7px}.opacity-control{min-width:148px}.viewer-meta{display:none}}
+</style>
+<style scoped>
+.ai-chat-btn { display: inline-flex; align-items: center; gap: 5px; border-radius: 7px; border: 1px solid rgb(143 53 183 / 0.40); background: rgb(143 53 183 / 0.12); padding: 5px 10px; font-size: 12px; color: #d292f4; white-space: nowrap; }
+.ai-chat-btn:hover { background: rgb(143 53 183 / 0.22); }
 </style>

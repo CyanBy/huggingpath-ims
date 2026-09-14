@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
-import { ArrowRight, BarChart3, BrainCircuit, Database, Layers, Microscope, Network, Play, Search, ShieldCheck, SlidersHorizontal, Upload, Users, Workflow } from '@lucide/vue'
+import { ArrowRight, BarChart3, BrainCircuit, Compass, Database, Layers, Microscope, Network, Search, ShieldCheck, SlidersHorizontal, Sparkles, Upload, Users, Workflow } from '@lucide/vue'
 import { MODEL_CATALOG } from '@/lib/modelCatalog'
 
 const router = useRouter()
@@ -16,8 +16,8 @@ const communityStats = [[String(MODEL_CATALOG.length), '开源模型'], ['12', '
         <div class="max-w-[760px]">
           <span class="inline-flex items-center gap-2 rounded-full border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-3 py-1 text-xs text-[#d292f4]"><Microscope :size="14" />PATHOLOGY AI WORKBENCH</span>
           <h1 class="mt-6 text-4xl font-bold leading-tight text-white sm:text-5xl lg:text-6xl">HuggingPath</h1>
-          <p class="mt-5 max-w-[680px] text-lg leading-8 text-[#aab4c4]">连接病理切片、Case、研究项目与开源 AI 模型，在一个工作台中完成分析、验证和结果管理。</p>
-          <div class="mt-8 flex flex-wrap gap-3"><button class="btn-primary h-11 px-6" @click="router.push('/explore')"><Play :size="17" />探索模型</button><button class="btn-secondary h-11 px-6" @click="router.push('/workbench/tasks')">进入分析工作台 <ArrowRight :size="16" /></button></div>
+          <p class="mt-5 max-w-[680px] text-lg leading-8 text-[#aab4c4]">连接病理切片、Case、研究项目与开源 AI 模型，在一个工作台中完成分析、验证和结果管理。AI 助手全程在线，用对话帮你检索数据、解读结果、串联分析流程。</p>
+          <div class="mt-8 flex flex-wrap gap-3"><button class="btn-primary h-11 px-6" @click="router.push('/explore')"><Compass :size="17" />探索模型</button><button class="btn-secondary h-11 px-6" @click="router.push('/assistant')"><Sparkles :size="16" />AI 助手开聊</button></div>
         </div>
       </div>
     </section>

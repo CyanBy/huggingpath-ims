@@ -6,7 +6,7 @@ import AppNavbar from './components/AppNavbar.vue'
 
 const route = useRoute()
 const isLoginPage = computed(() => route.name === 'login')
-const isImmersivePage = computed(() => route.name === 'workbench-run')
+const isImmersivePage = computed(() => route.name === 'workbench-run' || route.name === 'assistant-chat')
 </script>
 
 <template>

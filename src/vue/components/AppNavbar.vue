@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { Check, ChevronDown, CircleAlert, CloudUpload, Download, LogOut, Menu, Package, Plug, Search, ShieldCheck, UserCircle, X } from '@lucide/vue'
+import { Check, ChevronDown, CircleAlert, CloudUpload, Download, LogOut, Menu, Package, Plug, Search, ShieldCheck, Sparkles, UserCircle, X } from '@lucide/vue'
 import { canAccessAdmin, hasDirectoryPermission, signOut, type Permission } from '@/lib/accountDirectory'
 import { useDirectory } from '../composables/useDirectory'
 import { useUploadTransfers } from '../composables/useUploadTransfers'
@@ -30,6 +30,7 @@ const workbenchLinks: { label: string; path: string; permission: Permission }[] 
 const visibleWorkbenchLinks = computed(() => workbenchLinks.filter((item) => hasDirectoryPermission(session.value, item.permission)))
 const workbenchActive = computed(() => route.path.startsWith('/workbench'))
 const adminActive = computed(() => route.path.startsWith('/admin'))
+const assistantActive = computed(() => route.path.startsWith('/assistant'))
 
 const handleScroll = () => { scrolled.value = window.scrollY > 80 }
 const handleKeydown = (event: KeyboardEvent) => {
@@ -91,14 +92,19 @@ function isActive(path: string) {
       </nav>
 
       <div class="flex items-center gap-2 sm:gap-3">
-        <label class="relative hidden md:block">
+        <label v-if="!assistantActive" class="relative hidden md:block">
           <Search :size="16" class="pointer-events-none absolute left-3 top-3 text-[#64748b]" />
-          <input class="input-field h-10 w-[280px] pl-9" placeholder="搜索模型、研究项目..." />
+          <input :class="['input-field h-10 pl-9', assistantActive ? 'w-[190px]' : 'w-[280px]']" placeholder="搜索模型、研究项目..." />
         </label>
-        <button class="icon-button" title="上传工具下载" @click="uploadToolOpen = true"><Plug :size="20" /></button>
+        <button
+          :class="['tool-button', assistantActive ? 'border-[#8f35b7]/60 bg-[#8f35b7]/20 text-[#d292f4]' : '']"
+          title="AI 助手"
+          @click="router.push('/assistant/chat')"
+        ><Sparkles :size="16" /><span class="hidden lg:inline">AI 助手</span></button>
+        <button class="tool-button" title="上传工具下载" @click="uploadToolOpen = true"><Plug :size="16" /><span class="hidden lg:inline">上传工具</span></button>
         <div class="relative">
-          <button :class="['icon-button relative',transferCenterOpen&&'bg-white/[0.06] text-white']" title="传输任务" aria-label="快速查看传输任务" @click="transferCenterOpen=!transferCenterOpen;userMenuOpen=false">
-            <CloudUpload :size="20" />
+          <button :class="['tool-button relative', transferCenterOpen && 'border-white/[0.25] bg-white/[0.06] text-white']" title="传输任务" aria-label="快速查看传输任务" @click="transferCenterOpen=!transferCenterOpen;userMenuOpen=false">
+            <CloudUpload :size="16" /><span class="hidden lg:inline">传输队列</span>
             <span v-if="pendingCount" class="transfer-count">{{ pendingCount > 99 ? '99+' : pendingCount }}</span>
             <span v-else-if="transferExceptionCount" class="transfer-failed"><CircleAlert :size="9" :stroke-width="3" /></span>
             <span v-else-if="allComplete" class="transfer-complete"><Check :size="9" :stroke-width="3" /></span>
@@ -123,6 +129,7 @@ function isActive(path: string) {
 
     <div v-if="mobileOpen" class="border-b border-white/[0.06] bg-[#1f2024] p-4 lg:hidden">
       <div class="section-container grid gap-1">
+        <RouterLink to="/assistant/chat" class="mobile-link">AI 助手</RouterLink>
         <RouterLink to="/explore" class="mobile-link">模型中心</RouterLink>
         <RouterLink v-for="item in visibleWorkbenchLinks" :key="item.path" :to="item.path" class="mobile-link">{{ item.label }}</RouterLink>
         <RouterLink to="/datasets" class="mobile-link">项目广场</RouterLink>
@@ -152,6 +159,9 @@ function isActive(path: string) {
 .nav-link { border-radius: 6px; padding: 6px 12px; color: #94a3b8; font-size: 14px; font-weight: 500; }
 .nav-link:hover, .nav-active { background: rgb(255 255 255 / 0.08); color: #e2e8f0; }
 .icon-button { display: grid; width: 36px; height: 36px; place-items: center; border-radius: 8px; color: #94a3b8; }
+.tool-button { display: inline-flex; height: 36px; align-items: center; gap: 6px; border-radius: 8px; border: 1px solid rgb(255 255 255 / 0.10); padding: 0 10px; color: #94a3b8; font-size: 13px; }
+.tool-button:hover { border-color: rgb(255 255 255 / 0.20); color: #e2e8f0; }
+@media (max-width: 1024px) { .tool-button { width: 36px; justify-content: center; padding: 0; border-color: transparent; } }
 .icon-button:hover { background: rgb(255 255 255 / 0.06); color: #e2e8f0; }
 .transfer-count{position:absolute;right:-4px;top:-4px;display:grid;min-width:17px;height:17px;place-items:center;border:2px solid #0f1014;border-radius:9px;background:#ef4444;padding:0 4px;color:white;font-size:9px;font-weight:700}.transfer-complete,.transfer-failed{position:absolute;right:-2px;top:-2px;display:grid;width:15px;height:15px;place-items:center;border:2px solid #0f1014;border-radius:50%}.transfer-complete{background:#22c55e;color:#07160d}.transfer-failed{background:#ef4444;color:white}
 .menu-button { display: flex; width: 100%; height: 36px; align-items: center; gap: 8px; border-radius: 6px; padding: 0 12px; color: #94a3b8; font-size: 14px; }
