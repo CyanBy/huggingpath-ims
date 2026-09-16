@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AlertTriangle, ArrowLeft, History, Plus, Play } from '@lucide/vue'
+import { AlertTriangle, ArrowLeft, History, Plus, Play, Sparkles } from '@lucide/vue'
 import { configureAndStartAnalysisTask, countCaseAnalysisTasks, countWsiSuccessfulAnalyses, createTaskFromCases, getCaseAnalysisHistory, getWsiAnalysisHistory, readAnalysisTasks } from '@/lib/analysisTasks'
 import type { AnalysisConfigurationItem, AnalysisModelAssignments } from '@/lib/analysisConfiguration'
 import { getPathologySiteLabel, getSamplingMethodLabel } from '@/lib/pathologySpecimens'
@@ -13,6 +13,14 @@ import AnalysisConfigurationModal from '../components/AnalysisConfigurationModal
 const route = useRoute()
 const router = useRouter()
 const caseId = computed(() => String(route.params.caseId || 'S-20260517-1906'))
+
+/** Case 详情入口：带着当前 Case 去问 AI（新对话 + 自动提问） */
+function askAgent() {
+  router.push({
+    path: '/assistant/chat',
+    query: { attachKind: 'case', attachId: caseId.value, attachLabel: caseId.value, q: '总结一下这个 Case', entry: 'Case 详情' },
+  })
+}
 const { cases, wsis, refresh } = useWorkspaceData()
 const tasks = ref(readAnalysisTasks())
 const current = computed(() => cases.value.find((item) => item.id === caseId.value))
@@ -81,7 +89,7 @@ function viewWsiAnalysis(wsiId: string) {
 <template>
   <div v-if="deleted" class="section-container grid min-h-[60dvh] place-items-center"><div class="max-w-[560px] rounded-lg border border-white/[0.08] bg-[#202126] px-8 py-10 text-center"><span class="mx-auto grid h-12 w-12 place-items-center rounded-lg bg-[#ef4444]/10 text-[#fca5a5]"><AlertTriangle :size="23" /></span><h1 class="mt-4 text-xl font-bold">Case 已删除</h1><p class="mt-2">Case {{ caseId }} 已随关联链路删除，当前详情不可继续访问。</p><button class="btn-primary mt-6" @click="router.push('/workbench/cases')">返回 Case 列表</button></div></div>
   <div v-else class="min-h-[calc(100dvh-64px)] px-4 py-5 lg:px-6">
-    <header class="mb-5 flex flex-wrap items-center justify-between gap-3"><div><button class="mb-3 flex items-center gap-2 text-sm text-[#d292f4]" @click="router.push('/workbench/cases')"><ArrowLeft :size="15" />返回 Case 列表</button><h1 class="text-2xl font-bold">Case 详情</h1><p class="mt-1 font-mono text-sm text-[#94a3b8]">{{ caseId }}</p></div><div class="flex gap-2"><button v-if="getCaseAnalysisHistory(caseId,tasks).length" class="btn-secondary h-10" @click="viewCaseAnalysis"><History :size="15" />查看分析</button><button class="btn-secondary h-10" @click="addWsi"><Plus :size="15" />添加 WSI</button><button class="btn-primary h-10" :disabled="!rows.length" @click="analyzeCase"><Play :size="15" />配置并分析</button></div></header>
+    <header class="mb-5 flex flex-wrap items-center justify-between gap-3"><div><button class="mb-3 flex items-center gap-2 text-sm text-[#d292f4]" @click="router.push('/workbench/cases')"><ArrowLeft :size="15" />返回 Case 列表</button><h1 class="text-2xl font-bold">Case 详情</h1><p class="mt-1 font-mono text-sm text-[#94a3b8]">{{ caseId }}</p></div><div class="flex gap-2"><button class="btn-secondary h-10" title="就当前 Case 发起 AI 对话" @click="askAgent"><Sparkles :size="15" />总结一下</button><button v-if="getCaseAnalysisHistory(caseId,tasks).length" class="btn-secondary h-10" @click="viewCaseAnalysis"><History :size="15" />查看分析</button><button class="btn-secondary h-10" @click="addWsi"><Plus :size="15" />添加 WSI</button><button class="btn-primary h-10" :disabled="!rows.length" @click="analyzeCase"><Play :size="15" />配置并分析</button></div></header>
     <section class="rounded-lg border border-white/[0.08] bg-[#202126] p-5">
       <div class="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 class="font-semibold">基本信息</h2><p class="mt-1 text-xs text-[#64748b]">临床与标本信息使用脱敏数据展示。</p></div><span :class="['rounded-md border px-2 py-1 text-xs',current?.priority==='加急'?'border-[#ef4444]/40 bg-[#ef4444]/10 text-[#fca5a5]':'border-white/[0.10] text-[#cbd5e1]']">{{ current?.priority }}</span></div>
       <dl class="case-info-grid"><div><dt>Case 编号</dt><dd class="font-mono">{{ caseId }}</dd></div><div><dt>脱敏患者编号</dt><dd>{{ current?.patientCode }}</dd></div><div><dt>年龄 / 性别</dt><dd>{{ current?.age ?? '未知' }} / {{ current?.sex }}</dd></div><div><dt>收样日期</dt><dd>{{ current?.receivedAt }}</dd></div><div class="sm:col-span-2"><dt>临床诊断</dt><dd>{{ current?.diagnosis }}</dd></div><div><dt>取材部位</dt><dd>{{ getPathologySiteLabel(current?.site || '') }}</dd></div><div><dt>取材方式</dt><dd>{{ getSamplingMethodLabel(current?.samplingMethod || '') }}</dd></div><div><dt>送检科室</dt><dd>{{ current?.department || '未填写' }}</dd></div><div><dt>处理状态</dt><dd>{{ current?.status }}</dd></div><div class="sm:col-span-2"><dt>备注</dt><dd>{{ current?.remark || '无' }}</dd></div></dl>

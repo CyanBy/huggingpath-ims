@@ -36,6 +36,19 @@ const filteredTasks = computed(() => {
   })
 })
 
+/** 任意任务入口：带着任务上下文去问 AI（新对话 + 自动提问） */
+function askAgent(task: AnalysisTaskRecord) {
+  router.push({
+    path: '/assistant/chat',
+    query: { attachKind: 'task', attachId: task.id, attachLabel: task.taskName, q: '这个任务现在什么进度', entry: '任务队列' },
+  })
+}
+
+/** AI 助手发起的任务：新开标签页跳回来源会话，不打断任务列表 */
+function openAgentSession(sessionId: string) {
+  window.open(`/#/assistant/chat?session=${sessionId}`, '_blank')
+}
+
 function progress(task: AnalysisTaskRecord) {
   if (!task.models.length) return 0
   return Math.round(task.models.reduce((total, run) => total + (run.status === '分析完成' ? 100 : Math.max(0, Math.min(100, run.progress ?? 0))), 0) / task.models.length)
@@ -98,7 +111,7 @@ function removeTask(id: string) {
       <div v-else class="overflow-x-auto">
         <table class="w-full min-w-[1050px] table-fixed text-sm">
           <thead class="bg-[#252730] text-[#cbd5e1]"><tr><th class="w-[23%]">任务编号</th><th>来源</th><th>对象类型</th><th>分析规模</th><th class="w-[17%]">AI 模型</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead>
-          <tbody><tr v-for="task in filteredTasks" :key="task.id" class="cursor-pointer border-b border-white/[0.06] hover:bg-white/[0.025]" @dblclick="openWorkbench(task)"><td><TaskNameHover :task="task" name-class="block truncate" /><small class="mt-1 block truncate text-[#64748b]">{{ getTaskDisplaySubtitle(task) }}</small></td><td>{{ task.sourceLabel }}</td><td>{{ task.objectType }}</td><td><b class="block font-medium text-[#e2e8f0]">{{ getTaskObjectSummary(task).primary }}</b><small v-if="getTaskObjectSummary(task).secondary" class="mt-1 block text-[#64748b]">{{ getTaskObjectSummary(task).secondary }}</small></td><td><span v-for="model in getUniqueTaskModels(task)" :key="model.id" class="mr-1 inline-flex rounded border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-1 text-xs text-[#d292f4]">{{ model.name }}</span></td><td><span :class="['inline-flex rounded-md border px-2 py-1 text-xs', statusClass(task.status)]">{{ statusText(task) }}</span></td><td class="text-xs text-[#94a3b8]">{{ task.createdAt }}</td><td @dblclick.stop><div class="flex gap-3"><button class="text-xs text-[#d292f4]" @click="router.push(`/workbench/run/${task.id}`)">{{ task.status === '分析完成' ? '查看结果' : '打开工作台' }}</button><button class="text-xs text-[#ff9c9c]" @click="removeTask(task.id)">删除</button></div></td></tr></tbody>
+          <tbody><tr v-for="task in filteredTasks" :key="task.id" class="cursor-pointer border-b border-white/[0.06] hover:bg-white/[0.025]" @dblclick="openWorkbench(task)"><td><TaskNameHover :task="task" name-class="block truncate" /><small class="mt-1 block truncate text-[#64748b]">{{ getTaskDisplaySubtitle(task) }}</small></td><td><button v-if="task.agentSessionId" class="text-[#d292f4] hover:underline" title="在新标签页跳回发起会话" @click.stop="openAgentSession(task.agentSessionId)">{{ task.sourceLabel }}</button><template v-else>{{ task.sourceLabel }}</template></td><td>{{ task.objectType }}</td><td><b class="block font-medium text-[#e2e8f0]">{{ getTaskObjectSummary(task).primary }}</b><small v-if="getTaskObjectSummary(task).secondary" class="mt-1 block text-[#64748b]">{{ getTaskObjectSummary(task).secondary }}</small></td><td><span v-for="model in getUniqueTaskModels(task)" :key="model.id" class="mr-1 inline-flex rounded border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-1 text-xs text-[#d292f4]">{{ model.name }}</span></td><td><span :class="['inline-flex rounded-md border px-2 py-1 text-xs', statusClass(task.status)]">{{ statusText(task) }}</span></td><td class="text-xs text-[#94a3b8]">{{ task.createdAt }}</td><td @dblclick.stop><div class="flex gap-3"><button class="text-xs text-[#d292f4]" @click="router.push(`/workbench/run/${task.id}`)">{{ task.status === '分析完成' ? '查看结果' : '打开工作台' }}</button><button class="text-xs text-[#d292f4]" @click.stop="askAgent(task)">问 AI</button><button class="text-xs text-[#ff9c9c]" @click="removeTask(task.id)">删除</button></div></td></tr></tbody>
         </table>
       </div>
     </section>

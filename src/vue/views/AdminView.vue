@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, defineComponent, h, reactive, ref } from 'vue'
-import { Building2, ChevronDown, ChevronRight, LayoutDashboard, Plus, Search, Settings, ShieldCheck, Users, X } from '@lucide/vue'
+import { computed, defineComponent, h, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { Building2, ChevronDown, ChevronRight, Filter, LayoutDashboard, MessageSquareText, Plus, ScrollText, Search, Settings, ShieldCheck, Users, X } from '@lucide/vue'
 import {
   createDirectoryAccount,
   createDirectoryOrganization,
@@ -24,10 +24,11 @@ import {
   type Permission,
 } from '@/lib/accountDirectory'
 import { MODEL_CATALOG } from '@/lib/modelCatalog'
+import { AGENT_EVENT_TYPE_LABELS, AGENT_EVENTS_CHANGE_EVENT, clearAgentEvents, readAgentEvents, type AgentEvent } from '@/lib/eventLog'
 import { useDirectory } from '../composables/useDirectory'
 import StatusSwitch from '../components/StatusSwitch.vue'
 
-type Section = 'overview' | 'users' | 'roles' | 'organizations' | 'models' | 'settings'
+type Section = 'overview' | 'users' | 'roles' | 'organizations' | 'models' | 'logs' | 'settings'
 const { directory, session, refresh } = useDirectory()
 const section = ref<Section>('overview')
 const systemExpanded = ref(false)
@@ -72,6 +73,7 @@ const menu = computed(() => [
   { key: 'roles' as const, label: '角色管理', icon: ShieldCheck, show: hasDirectoryPermission(session.value, 'roles:manage') },
   { key: 'organizations' as const, label: '机构管理', icon: Building2, show: hasDirectoryPermission(session.value, 'organizations:manage') },
   { key: 'models' as const, label: '模型管理', icon: Settings, show: hasDirectoryPermission(session.value, 'models:manage') },
+  { key: 'logs' as const, label: '行为日志', icon: ScrollText, show: true },
 ].filter((item) => item.show))
 const filteredUsers = computed(() => directory.value.accounts.filter((item) => {
   const query = keyword.value.trim().toLowerCase()
@@ -84,6 +86,82 @@ const filteredRoles = computed(() => directory.value.roles.filter((item) => !key
 const filteredOrganizations = computed(() => directory.value.organizations.filter((item) => !keyword.value || `${item.name} ${item.code} ${item.type}`.toLowerCase().includes(keyword.value.toLowerCase())))
 const pendingRequests = computed(() => directory.value.membershipRequests.filter((item) => item.status === 'pending'))
 function notify(message: string) { toast.value = message; window.setTimeout(() => { toast.value = '' }, 5000) }
+
+// ---------- 行为日志 ----------
+const agentEvents = ref<AgentEvent[]>(readAgentEvents())
+const logTypeFilter = ref('')
+
+function onAgentEventsChange() { agentEvents.value = readAgentEvents() }
+onMounted(() => window.addEventListener(AGENT_EVENTS_CHANGE_EVENT, onAgentEventsChange))
+onUnmounted(() => window.removeEventListener(AGENT_EVENTS_CHANGE_EVENT, onAgentEventsChange))
+
+const filteredLogs = computed(() => agentEvents.value.filter((event) => !logTypeFilter.value || event.type === logTypeFilter.value))
+
+const logStats = computed(() => {
+  const events = agentEvents.value
+  const count = (type: string) => events.filter((event) => event.type === type).length
+  const gateShown = count('gate.show')
+  return {
+    sessions: count('session.create'),
+    messages: count('message.send'),
+    gateRate: gateShown ? `${Math.round((count('gate.confirm') / gateShown) * 100)}%` : '—',
+    taskReplies: count('task.complete'),
+  }
+})
+
+/** 近 14 天每日消息量 */
+const dailySeries = computed(() => {
+  const days: { label: string; short: string; count: number }[] = []
+  for (let i = 13; i >= 0; i--) {
+    const date = new Date(Date.now() - i * 86400000)
+    const pad = (value: number) => String(value).padStart(2, '0')
+    days.push({ label: `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`, short: `${date.getMonth() + 1}/${date.getDate()}`, count: 0 })
+  }
+  const index = new Map(days.map((day, i) => [day.label, i]))
+  for (const event of agentEvents.value) {
+    if (event.type !== 'message.send') continue
+    const i = index.get(event.createdAt.slice(0, 10))
+    if (i !== undefined) days[i].count += 1
+  }
+  const max = Math.max(1, ...days.map((day) => day.count))
+  return days.map((day) => ({ ...day, pct: Math.max(2, Math.round((day.count / max) * 100)) }))
+})
+
+/** 预览-确认闸门漏斗 */
+const gateFunnel = computed(() => {
+  const count = (type: string) => agentEvents.value.filter((event) => event.type === type).length
+  const shown = count('gate.show')
+  const base = Math.max(1, shown)
+  return [
+    { label: '闸门展示', count: shown, pct: 100, color: '#8f35b7' },
+    { label: '确认执行', count: count('gate.confirm'), pct: Math.round((count('gate.confirm') / base) * 100), color: '#84cc16' },
+    { label: '取消', count: count('gate.cancel'), pct: Math.round((count('gate.cancel') / base) * 100), color: '#64748b' },
+  ]
+})
+
+/** 情境入口使用分布 */
+const entryStats = computed(() => {
+  const counts = new Map<string, number>()
+  for (const event of agentEvents.value) {
+    if (event.type !== 'entry.use') continue
+    counts.set(event.detail, (counts.get(event.detail) ?? 0) + 1)
+  }
+  const rows = [...counts.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count)
+  const max = Math.max(1, ...rows.map((row) => row.count))
+  return rows.map((row) => ({ ...row, pct: Math.round((row.count / max) * 100) }))
+})
+
+function formatLogTime(iso: string) {
+  const date = new Date(iso)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
+function clearLogs() {
+  clearAgentEvents()
+  logTypeFilter.value = ''
+  notify('行为日志已清空。')
+}
 function roleName(id: string) { return directory.value.roles.find((item) => item.id === id)?.name || '未知角色' }
 function orgName(id: string | null) { return id ? directory.value.organizations.find((item) => item.id === id)?.name || '机构已删除' : '个人账号' }
 function handleResult(result: { ok: boolean; message?: string }, success: string) { if (!result.ok) { formError.value = result.message || '操作失败。'; return false } refresh(); notify(success); return true }
@@ -226,6 +304,74 @@ const AdminModal = defineComponent({
         </div>
 
         <section v-if="pendingRequests.length" class="mt-4 overflow-hidden rounded-lg border border-white/[0.08] bg-[#202126]"><header class="border-b border-white/[0.07] p-4 font-semibold">待处理加入申请</header><div v-for="request in pendingRequests" :key="request.id" class="flex items-center justify-between border-t border-white/[0.06] px-4 py-3 text-sm"><div><b>{{ request.realName }}</b><span class="ml-3 text-[#64748b]">{{ orgName(request.organizationId) }} · {{ request.reason }}</span></div><div class="flex gap-3"><button class="text-[#6ee7a0]" @click="review(request.id,'approved')">通过</button><button class="text-[#ff9c9c]" @click="review(request.id,'rejected')">拒绝</button></div></div></section>
+      </template>
+
+      <template v-else-if="section==='logs'">
+        <header class="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-2xl font-semibold">行为日志</h2>
+            <p class="mt-1 text-sm">AI 助手的关键行为事件，用于驱动对话能力的迭代决策。数据保存在本地，上限 1000 条。</p>
+          </div>
+          <button class="btn-secondary h-9 px-3 text-sm" @click="clearLogs">清空日志</button>
+        </header>
+
+        <div class="mb-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <article class="overview-card"><small>会话创建</small><strong>{{ logStats.sessions }}</strong><p>AI 助手累计创建的对话数。</p></article>
+          <article class="overview-card"><small>消息发送</small><strong>{{ logStats.messages }}</strong><p>用户累计发送的提问数。</p></article>
+          <article class="overview-card"><small>闸门确认率</small><strong>{{ logStats.gateRate }}</strong><p>预览-确认闸门中确认执行的比例。</p></article>
+          <article class="overview-card"><small>任务回话</small><strong>{{ logStats.taskReplies }}</strong><p>任务终态自动回写到会话的次数。</p></article>
+        </div>
+
+        <div class="mb-4 grid gap-4 xl:grid-cols-2">
+          <section class="rounded-lg border border-white/[0.08] bg-[#202126] p-4">
+            <header class="mb-4 flex items-center gap-2 text-sm font-semibold"><MessageSquareText :size="16" class="text-[#d292f4]" />每日消息量（近 14 天）</header>
+            <div class="flex h-32 items-end gap-1.5">
+              <div v-for="day in dailySeries" :key="day.label" class="flex h-full flex-1 flex-col items-center justify-end gap-1">
+                <small v-if="day.count" class="text-[10px] text-[#aab4c4]">{{ day.count }}</small>
+                <div class="w-full rounded-t bg-[#8f35b7]/60" :style="{ height: `${day.pct}%` }" :title="`${day.label} · ${day.count} 条`"></div>
+                <small class="text-[10px] text-[#64748b]">{{ day.short }}</small>
+              </div>
+            </div>
+          </section>
+
+          <section class="rounded-lg border border-white/[0.08] bg-[#202126] p-4">
+            <header class="mb-4 flex items-center gap-2 text-sm font-semibold"><Filter :size="16" class="text-[#d292f4]" />预览-确认闸门漏斗</header>
+            <div v-for="row in gateFunnel" :key="row.label" class="mb-3">
+              <div class="mb-1 flex justify-between text-xs"><span class="text-[#aab4c4]">{{ row.label }}</span><span class="text-white">{{ row.count }}</span></div>
+              <div class="h-2.5 rounded-full bg-white/[0.06]"><div class="h-full rounded-full" :style="{ width: `${Math.max(row.count ? 4 : 0, row.pct)}%`, background: row.color }"></div></div>
+            </div>
+            <header class="mb-4 mt-6 flex items-center gap-2 text-sm font-semibold"><ScrollText :size="16" class="text-[#d292f4]" />情境入口使用</header>
+            <div v-for="row in entryStats" :key="row.label" class="mb-3">
+              <div class="mb-1 flex justify-between text-xs"><span class="text-[#aab4c4]">{{ row.label }}</span><span class="text-white">{{ row.count }}</span></div>
+              <div class="h-2.5 rounded-full bg-white/[0.06]"><div class="h-full rounded-full bg-[#d292f4]/70" :style="{ width: `${Math.max(4, row.pct)}%` }"></div></div>
+            </div>
+            <p v-if="!entryStats.length" class="text-xs text-[#64748b]">还没有情境入口的使用记录。</p>
+          </section>
+        </div>
+
+        <section class="overflow-hidden rounded-lg border border-white/[0.08] bg-[#202126]">
+          <header class="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
+            <b class="text-sm">事件明细（{{ filteredLogs.length }}）</b>
+            <select v-model="logTypeFilter" class="rounded-md border border-white/[0.10] bg-[#17181d] px-2 py-1 text-xs text-[#aab4c4] outline-none focus:border-[#8f35b7]/50">
+              <option value="">全部类型</option>
+              <option v-for="(label, type) in AGENT_EVENT_TYPE_LABELS" :key="type" :value="type">{{ label }}</option>
+            </select>
+          </header>
+          <div class="max-h-[420px] overflow-x-auto overflow-y-auto">
+            <table class="w-full min-w-[720px] text-sm">
+              <thead class="bg-[#252730]"><tr><th>时间</th><th>类型</th><th>详情</th><th>会话</th></tr></thead>
+              <tbody>
+                <tr v-for="event in filteredLogs.slice(0, 100)" :key="event.id" class="border-t border-white/[0.06]">
+                  <td class="whitespace-nowrap text-xs text-[#94a3b8]">{{ formatLogTime(event.createdAt) }}</td>
+                  <td><span class="inline-flex rounded border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-0.5 text-xs text-[#d292f4]">{{ AGENT_EVENT_TYPE_LABELS[event.type] }}</span></td>
+                  <td class="max-w-[360px] truncate text-xs" :title="event.detail">{{ event.detail || '—' }}</td>
+                  <td><a v-if="event.sessionId" :href="`#/assistant/chat?session=${event.sessionId}`" target="_blank" class="text-xs text-[#d292f4] hover:underline">打开会话</a><span v-else class="text-xs text-[#64748b]">—</span></td>
+                </tr>
+                <tr v-if="!filteredLogs.length"><td colspan="4" class="py-8 text-center text-xs text-[#64748b]">暂无事件，去 AI 助手聊几句再来看看。</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </template>
 
       <template v-else-if="section==='users'">

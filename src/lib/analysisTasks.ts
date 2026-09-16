@@ -7,8 +7,8 @@ import type {
 } from './analysisSelection';
 import { MODEL_CATALOG } from './modelCatalog';
 
-export type AnalysisTaskSourceType = 'model_center' | 'wsi' | 'case' | 'project';
-export type AnalysisTaskSourceLabel = '模型中心' | 'WSI 管理' | 'Case 管理' | '研究项目管理';
+export type AnalysisTaskSourceType = 'model_center' | 'wsi' | 'case' | 'project' | 'agent';
+export type AnalysisTaskSourceLabel = '模型中心' | 'WSI 管理' | 'Case 管理' | '研究项目管理' | 'AI 助手';
 export type AnalysisObjectType = 'WSI' | 'Case' | '研究项目';
 export type AnalysisTaskStatus = '待分析' | '排队中' | '正在分析' | '分析完成' | '失败' | '已停止';
 
@@ -77,6 +77,8 @@ export interface AnalysisTaskRecord {
   projectCount?: number;
   models: AnalysisModelRunRecord[];
   objects: AnalysisTaskObjectRecord[];
+  /** 由 AI 助手会话发起的任务，记录来源会话用于跳回与状态联动 */
+  agentSessionId?: string;
 }
 
 export interface ProjectTaskCaseInput {
@@ -443,7 +445,7 @@ function normalizeTask(raw: unknown): AnalysisTaskRecord | null {
     taskNumber: task.taskNumber || buildTaskNumber(id, createdAt),
     taskName: task.taskName || '未命名分析任务',
     sourceType,
-    sourceLabel: task.sourceLabel || (sourceType === 'case' ? 'Case 管理' : sourceType === 'project' ? '研究项目管理' : sourceType === 'model_center' ? '模型中心' : 'WSI 管理'),
+    sourceLabel: task.sourceLabel || (sourceType === 'case' ? 'Case 管理' : sourceType === 'project' ? '研究项目管理' : sourceType === 'model_center' ? '模型中心' : sourceType === 'agent' ? 'AI 助手' : 'WSI 管理'),
     objectType: resolvedObjectType,
     objectCount: objectCountText(objects.length),
     status,
@@ -453,6 +455,7 @@ function normalizeTask(raw: unknown): AnalysisTaskRecord | null {
     projectCount: resolvedProjectCount || task.projectCount,
     models,
     objects,
+    agentSessionId: task.agentSessionId,
   };
 
   normalized.objects = syncObjectStatuses(normalized, models, status);
@@ -1064,6 +1067,7 @@ function buildTask(args: {
   objects: AnalysisTaskObjectRecord[];
   caseCount?: number;
   projectCount?: number;
+  agentSessionId?: string;
 }) {
   const seenObjectIds = new Set<string>();
   const objects = args.objects.filter((object) => {
@@ -1088,6 +1092,7 @@ function buildTask(args: {
     projectCount: args.projectCount,
     models: rebuildRuns(objects),
     objects,
+    agentSessionId: args.agentSessionId,
   };
   return saveAnalysisTask(task);
 }
@@ -1098,6 +1103,7 @@ export function createTaskFromSelection(args: {
   selectedModel: { id: string; name: string };
   selection: AnalysisTaskSelection;
   taskName?: string;
+  agentSessionId?: string;
 }) {
   const { sourceType, sourceLabel, selectedModel, selection } = args;
   const selectedDefinition = getModelDefinition(selectedModel.id, selectedModel);
@@ -1133,9 +1139,55 @@ export function createTaskFromSelection(args: {
     objects,
     caseCount: objectType === 'WSI' ? undefined : caseCount,
     projectCount: objectType === '研究项目' ? projectCount : undefined,
+    agentSessionId: args.agentSessionId,
   });
 
   return task;
+}
+
+/**
+ * AI 助手对话确认后发起的分析任务：来源标记为「AI 助手」并记录来源会话，
+ * 用于任务列表跳回会话与会话状态徽标联动。
+ */
+export function createAgentAnalysisTask(args: {
+  agentSessionId: string;
+  modelId: string;
+  objects: Array<{
+    id: string;
+    name: string;
+    organ?: string;
+    stain?: string;
+    size?: string;
+    caseId?: string;
+    caseName?: string;
+    projectId?: string;
+    projectName?: string;
+  }>;
+}) {
+  const objects = args.objects.map((item) =>
+    objectFromData({
+      id: item.id,
+      name: item.name,
+      organ: item.organ,
+      stain: item.stain,
+      size: item.size,
+      caseId: item.caseId,
+      caseName: item.caseName,
+      projectId: item.projectId,
+      projectName: item.projectName,
+      modelIds: [args.modelId],
+    }),
+  );
+  const definition = getModelDefinition(args.modelId);
+  return buildTask({
+    taskName: `${definition.name} · 对话发起`,
+    sourceType: 'agent',
+    sourceLabel: 'AI 助手',
+    objectType: 'WSI',
+    modelLocked: true,
+    objects,
+    agentSessionId: args.agentSessionId,
+  });
 }
 
 export function createTaskFromWsis(args: {
