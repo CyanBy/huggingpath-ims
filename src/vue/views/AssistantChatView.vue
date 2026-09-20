@@ -52,6 +52,21 @@ const vFocusSelect = {
   },
 }
 
+/** 跑马灯：实测内容溢出容器时才启用悬停滚动（挂载/更新/悬停时重测） */
+function checkMarquee(el: HTMLElement) {
+  const track = el.querySelector('.title-marquee-track')
+  const first = track?.firstElementChild as HTMLElement | null
+  const overflow = first ? first.scrollWidth > el.clientWidth + 1 : false
+  el.classList.toggle('title-marquee-live', overflow)
+}
+const vMarquee = {
+  mounted: (el: HTMLElement) => {
+    checkMarquee(el)
+    el.addEventListener('mouseenter', () => checkMarquee(el))
+  },
+  updated: (el: HTMLElement) => checkMarquee(el),
+}
+
 type AttachedObject = AgentMessageAttachment
 type MainView = 'chat' | 'project-form'
 type CtxTarget = { kind: 'project' | 'session'; id: string }
@@ -1239,13 +1254,12 @@ watch(
                 :title="sessionTaskState(child.id)!.label"
               />
               <Pin v-if="child.pinned" :size="12" class="shrink-0 text-[#64748b]" />
-              <span v-if="child.title.length > 14" class="title-marquee min-w-0 flex-1" :title="child.title">
+              <span v-marquee class="title-marquee min-w-0 flex-1" :title="child.title">
                 <span class="title-marquee-track">
                   <span class="pr-8">{{ child.title }}</span>
                   <span class="pr-8" aria-hidden="true">{{ child.title }}</span>
                 </span>
               </span>
-              <span v-else class="min-w-0 flex-1 truncate">{{ child.title }}</span>
               <span v-if="child.unread && child.id !== activeId" class="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b6b]" title="有新回复" />
               <span
                 class="hidden shrink-0 text-[#64748b] hover:text-white group-hover:block"
@@ -1290,13 +1304,12 @@ watch(
             <span class="min-w-0 flex-1">
               <span class="flex items-center gap-1.5">
                 <Pin v-if="session.pinned" :size="12" class="shrink-0 text-[#64748b]" />
-                <span v-if="session.title.length > 14" class="title-marquee" :title="session.title">
+                <span v-marquee class="title-marquee" :title="session.title">
                   <span class="title-marquee-track">
                     <span class="pr-8">{{ session.title }}</span>
                     <span class="pr-8" aria-hidden="true">{{ session.title }}</span>
                   </span>
                 </span>
-                <span v-else class="truncate">{{ session.title }}</span>
                 <span v-if="session.unread && session.id !== activeId" class="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b6b]" title="有新回复" />
               </span>
               <span class="block text-xs text-[#64748b]">{{ relativeTime(session.updatedAt) }}</span>
@@ -1335,13 +1348,12 @@ watch(
             <span class="min-w-0 flex-1">
               <span class="flex items-center gap-1.5">
                 <Pin v-if="item.session.pinned" :size="12" class="shrink-0 text-[#64748b]" />
-                <span v-if="item.session.title.length > 14" class="title-marquee" :title="item.session.title">
+                <span v-marquee class="title-marquee" :title="item.session.title">
                   <span class="title-marquee-track">
                     <span class="pr-8">{{ item.session.title }}</span>
                     <span class="pr-8" aria-hidden="true">{{ item.session.title }}</span>
                   </span>
                 </span>
-                <span v-else class="truncate">{{ item.session.title }}</span>
                 <span v-if="item.session.unread && item.session.id !== activeId" class="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b6b]" title="有新回复" />
               </span>
               <span class="block truncate text-xs text-[#64748b]">
@@ -1496,13 +1508,12 @@ watch(
               :title="q"
               @click="send(q)"
             >
-              <span v-if="q.length > 16" class="title-marquee">
+              <span v-marquee class="title-marquee">
                 <span class="title-marquee-track">
                   <span class="pr-8">{{ q }}</span>
                   <span class="pr-8" aria-hidden="true">{{ q }}</span>
                 </span>
               </span>
-              <span v-else class="truncate">{{ q }}</span>
             </button>
           </div>
           <div class="mt-4 flex items-center justify-center gap-3">
@@ -2038,7 +2049,7 @@ watch(
 .msg-op:disabled { opacity: 0.4; }
 .title-marquee { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
 .title-marquee-track { display: inline-flex; }
-.title-marquee:hover .title-marquee-track { animation: title-marquee 6s linear infinite; }
+.title-marquee.title-marquee-live:hover .title-marquee-track { animation: title-marquee 6s linear infinite; }
 @keyframes title-marquee { to { transform: translateX(-50%); } }
 :deep(.preview-table) { width: 100%; border-collapse: collapse; font-size: 12px; }
 :deep(.preview-table th), :deep(.preview-table td) { border: 1px solid rgb(255 255 255 / 0.08); padding: 6px 10px; text-align: left; color: #aab4c4; }
