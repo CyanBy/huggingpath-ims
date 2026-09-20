@@ -74,7 +74,7 @@ let thinkTimer: number | undefined
 let streamTimer: number | undefined
 const sidebarOpen = ref(typeof window === 'undefined' ? true : window.innerWidth >= 768)
 const filesOpen = ref(false)
-const filesTab = ref<'wsi' | 'case' | 'task' | 'project'>('wsi')
+const filesTab = ref<'wsi' | 'case'>('wsi')
 const attached = ref<AttachedObject[]>([])
 const messageListEl = ref<HTMLElement | null>(null)
 
@@ -1363,8 +1363,6 @@ watch(
       <nav class="flex gap-1 border-b border-white/[0.06] p-2">
         <button :class="['file-tab', filesTab === 'wsi' && 'file-tab-active']" @click="filesTab = 'wsi'">WSI</button>
         <button :class="['file-tab', filesTab === 'case' && 'file-tab-active']" @click="filesTab = 'case'">Case</button>
-        <button :class="['file-tab', filesTab === 'task' && 'file-tab-active']" @click="filesTab = 'task'">任务</button>
-        <button :class="['file-tab', filesTab === 'project' && 'file-tab-active']" @click="filesTab = 'project'">项目</button>
       </nav>
       <div class="flex-1 overflow-y-auto p-2">
         <p class="px-2 py-2 text-xs text-[#64748b]">点条目挂为对话对象，点图标在新标签页查看。</p>
@@ -1385,7 +1383,7 @@ watch(
             </button>
           </div>
         </template>
-        <template v-else-if="filesTab === 'case'">
+        <template v-else>
           <div
             v-for="item in cases"
             :key="item.id"
@@ -1398,41 +1396,6 @@ watch(
               <span class="block text-xs text-[#64748b]">{{ item.diagnosis }} · {{ getPathologySiteLabel(item.site) }}</span>
             </span>
             <button class="hidden shrink-0 text-[#64748b] hover:text-[#d292f4] group-hover:block" title="在新标签页查看" @click.stop="viewObjectInNewTab({ kind: 'case', id: item.id, label: item.id })">
-              <ExternalLink :size="14" />
-            </button>
-          </div>
-        </template>
-        <template v-else-if="filesTab === 'task'">
-          <div
-            v-for="item in tasks"
-            :key="item.id"
-            class="group flex cursor-pointer items-center gap-2 rounded-md px-2 py-2.5 hover:bg-white/[0.05]"
-            @click="attachObject({ kind: 'task', id: item.id, label: item.taskName })"
-          >
-            <ListTodo :size="16" class="shrink-0 text-[#d292f4]" />
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-xs text-white">{{ item.taskName }}</span>
-              <span class="block text-xs text-[#64748b]">{{ item.status }} · {{ item.objectCount }}</span>
-            </span>
-            <button class="hidden shrink-0 text-[#64748b] hover:text-[#d292f4] group-hover:block" title="在新标签页查看" @click.stop="viewObjectInNewTab({ kind: 'task', id: item.id, label: item.taskName })">
-              <ExternalLink :size="14" />
-            </button>
-          </div>
-          <p v-if="tasks.length === 0" class="px-2 py-6 text-center text-xs text-[#64748b]">还没有分析任务</p>
-        </template>
-        <template v-else>
-          <div
-            v-for="item in projects"
-            :key="item.id"
-            class="group flex cursor-pointer items-center gap-2 rounded-md px-2 py-2.5 hover:bg-white/[0.05]"
-            @click="attachObject({ kind: 'project', id: item.id, label: item.name })"
-          >
-            <FolderOpen :size="16" class="shrink-0 text-[#d292f4]" />
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-xs text-white">{{ item.name }}</span>
-              <span class="block text-xs text-[#64748b]">{{ item.tags.join(' · ') || '研究项目' }}</span>
-            </span>
-            <button class="hidden shrink-0 text-[#64748b] hover:text-[#d292f4] group-hover:block" title="在新标签页查看" @click.stop="viewObjectInNewTab({ kind: 'project', id: item.id, label: item.name })">
               <ExternalLink :size="14" />
             </button>
           </div>
