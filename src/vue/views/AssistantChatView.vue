@@ -1582,49 +1582,6 @@ watch(
       </div>
     </Teleport>
 
-    <!-- 文件产物预览抽屉（对齐 Codex：默认查看，保留下载） -->
-    <Teleport to="body">
-      <div v-if="previewFile" class="fixed inset-0 z-[170]" @click="previewFile = null">
-        <aside class="absolute inset-y-0 right-0 flex w-[min(720px,92vw)] flex-col border-l border-white/[0.10] bg-[#17181d] shadow-2xl" @click.stop>
-          <header class="flex items-center gap-3 border-b border-white/[0.08] px-5 py-3.5">
-            <FileSpreadsheet v-if="previewFile.kind === 'table'" :size="17" class="shrink-0 text-[#d292f4]" />
-            <FileText v-else :size="17" class="shrink-0 text-[#d292f4]" />
-            <span class="min-w-0 flex-1">
-              <span class="block truncate text-sm font-semibold text-white">{{ previewFile.label }}</span>
-              <span v-if="previewFile.desc" class="block truncate text-xs text-[#64748b]">{{ previewFile.desc }}</span>
-            </span>
-            <a
-              :href="previewFile.path"
-              :download="previewFile.label"
-              class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-3 py-1.5 text-xs text-[#d292f4] hover:text-white"
-              title="下载文件"
-            >
-              <Download :size="13" />下载
-            </a>
-            <button class="icon-btn shrink-0" title="关闭" @click="previewFile = null"><X :size="16" /></button>
-          </header>
-          <div class="flex-1 overflow-y-auto p-5">
-            <p v-if="previewLoading" class="text-sm text-[#64748b]">读取文件中…</p>
-            <template v-else-if="previewContent">
-              <div v-if="previewContent.kind === 'csv'" class="overflow-x-auto">
-                <table class="preview-table">
-                  <tr v-for="(row, ri) in previewContent.rows ?? []" :key="ri">
-                    <component :is="ri === 0 ? 'th' : 'td'" v-for="(cell, ci) in row" :key="ci">{{ cell }}</component>
-                  </tr>
-                </table>
-                <p class="mt-2 text-xs text-[#64748b]">仅预览前 50 行，完整数据请下载。</p>
-              </div>
-              <!-- renderMdLite 先转义内容再插入标记，无注入风险 -->
-              <!-- eslint-disable vue/no-v-html -->
-              <div v-else-if="previewContent.kind === 'md'" v-html="renderMdLite(previewContent.text ?? '')"></div>
-              <!-- eslint-enable vue/no-v-html -->
-              <pre v-else class="whitespace-pre-wrap break-all font-mono text-xs leading-5 text-[#aab4c4]">{{ previewContent.text }}</pre>
-            </template>
-          </div>
-        </aside>
-      </div>
-    </Teleport>
-
     <!-- 图片产物预览 -->
     <Teleport to="body">
       <div v-if="previewImage" class="fixed inset-0 z-[170] grid place-items-center bg-black/80 p-6 backdrop-blur-sm" @click.self="previewImage = null">
@@ -1637,6 +1594,48 @@ watch(
         </section>
       </div>
     </Teleport>
+
+    <!-- 文件产物预览面板（挤压式布局，对齐 Codex：默认查看，保留下载；窄屏回退覆盖式） -->
+    <section
+      v-if="previewFile"
+      class="flex w-[min(480px,42vw)] shrink-0 flex-col border-l border-white/[0.06] bg-[#17181d] max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-[170] max-md:w-[92vw] max-md:border-l max-md:shadow-2xl"
+    >
+      <header class="flex items-center gap-3 border-b border-white/[0.08] px-5 py-3.5">
+        <FileSpreadsheet v-if="previewFile.kind === 'table'" :size="17" class="shrink-0 text-[#d292f4]" />
+        <FileText v-else :size="17" class="shrink-0 text-[#d292f4]" />
+        <span class="min-w-0 flex-1">
+          <span class="block truncate text-sm font-semibold text-white">{{ previewFile.label }}</span>
+          <span v-if="previewFile.desc" class="block truncate text-xs text-[#64748b]">{{ previewFile.desc }}</span>
+        </span>
+        <a
+          :href="previewFile.path"
+          :download="previewFile.label"
+          class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-3 py-1.5 text-xs text-[#d292f4] hover:text-white"
+          title="下载文件"
+        >
+          <Download :size="13" />下载
+        </a>
+        <button class="icon-btn shrink-0" title="关闭" @click="previewFile = null"><X :size="16" /></button>
+      </header>
+      <div class="flex-1 overflow-y-auto p-5">
+        <p v-if="previewLoading" class="text-sm text-[#64748b]">读取文件中…</p>
+        <template v-else-if="previewContent">
+          <div v-if="previewContent.kind === 'csv'" class="overflow-x-auto">
+            <table class="preview-table">
+              <tr v-for="(row, ri) in previewContent.rows ?? []" :key="ri">
+                <component :is="ri === 0 ? 'th' : 'td'" v-for="(cell, ci) in row" :key="ci">{{ cell }}</component>
+              </tr>
+            </table>
+            <p class="mt-2 text-xs text-[#64748b]">仅预览前 50 行，完整数据请下载。</p>
+          </div>
+          <!-- renderMdLite 先转义内容再插入标记，无注入风险 -->
+          <!-- eslint-disable vue/no-v-html -->
+          <div v-else-if="previewContent.kind === 'md'" v-html="renderMdLite(previewContent.text ?? '')"></div>
+          <!-- eslint-enable vue/no-v-html -->
+          <pre v-else class="whitespace-pre-wrap break-all font-mono text-xs leading-5 text-[#aab4c4]">{{ previewContent.text }}</pre>
+        </template>
+      </div>
+    </section>
 
     <!-- 新建对话归属选择器（对齐 Codex：搜索 + 项目列表 + 新建项目/自由对话） -->
     <Teleport to="body">
