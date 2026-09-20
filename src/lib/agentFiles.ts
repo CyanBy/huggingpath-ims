@@ -20,6 +20,36 @@ export type AgentUploadedFile = {
   textContent?: string
 }
 
+// ---------- 文件自动归类 ----------
+
+export type AgentFileCategory = 'slide' | 'doc' | 'sheet' | 'image' | 'other'
+
+export const AGENT_FILE_CATEGORY_LABELS: Record<AgentFileCategory, string> = {
+  slide: '切片',
+  doc: '文档',
+  sheet: '表格',
+  image: '图片',
+  other: '其他',
+}
+
+const SLIDE_EXTS = ['svs', 'ndpi', 'mrxs', 'sdpc', 'scn', 'tiff', 'tif', 'bif']
+const DOC_EXTS = ['doc', 'docx', 'pdf', 'md', 'txt', 'ppt', 'pptx']
+const SHEET_EXTS = ['csv', 'xls', 'xlsx', 'tsv', 'json']
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
+
+export function categorizeAgentFile(ext: string): AgentFileCategory {
+  const key = ext.toLowerCase()
+  if (SLIDE_EXTS.includes(key)) return 'slide'
+  if (DOC_EXTS.includes(key)) return 'doc'
+  if (SHEET_EXTS.includes(key)) return 'sheet'
+  if (IMAGE_EXTS.includes(key)) return 'image'
+  return 'other'
+}
+
+export function isSlideFile(ext: string) {
+  return SLIDE_EXTS.includes(ext.toLowerCase())
+}
+
 const STORAGE_KEY = 'huggingpath.agentFiles.v1'
 export const AGENT_FILES_CHANGE_EVENT = 'huggingpathAgentFilesChange'
 
@@ -79,6 +109,10 @@ export function addAgentFile(file: File, scope: { sessionId?: string; projectId?
     reader.readAsText(file)
   }
   return record
+}
+
+export function deleteAgentFile(id: string) {
+  writeAll(readAgentFiles().filter((item) => item.id !== id))
 }
 
 /** 草稿期上传的文件在会话创建后绑定会话 */

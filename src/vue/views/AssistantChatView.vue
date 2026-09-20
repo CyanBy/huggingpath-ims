@@ -25,7 +25,18 @@ import {
 import { createAgentAnalysisTask, readAnalysisTasks, startAnalysisTask } from '@/lib/analysisTasks'
 import { logAgentEvent } from '@/lib/eventLog'
 import { getStadDemoScript, matchStadReply, STAD_PROJECT_ID } from '@/lib/stadScript'
-import { addAgentFile, bindAgentFilesToSession } from '@/lib/agentFiles'
+import {
+  AGENT_FILES_CHANGE_EVENT,
+  AGENT_FILE_CATEGORY_LABELS,
+  addAgentFile,
+  bindAgentFilesToSession,
+  categorizeAgentFile,
+  deleteAgentFile,
+  readAgentFiles,
+  type AgentFileCategory,
+  type AgentUploadedFile,
+} from '@/lib/agentFiles'
+import { enqueueWsiTransfers } from '@/lib/uploadTransferQueue'
 import { dispatchAgentToast } from '@/lib/agentRuntime'
 import { getPathologySiteLabel } from '@/lib/pathologySpecimens'
 import { readWorkspaceCases, readWorkspaceProjects, readWorkspaceWsis, writeWorkspaceProjects, type WorkspaceCase, type WorkspaceProject, type WorkspaceWsi } from '@/vue/data/pathologyWorkspace'
@@ -165,11 +176,13 @@ function onStorage(event: StorageEvent) {
 onMounted(() => {
   window.addEventListener('analysisTasksChange', onTasksChange)
   window.addEventListener(AGENT_SESSIONS_CHANGE_EVENT, onSessionsChange)
+  window.addEventListener(AGENT_FILES_CHANGE_EVENT, onAgentFilesChange)
   window.addEventListener('storage', onStorage)
 })
 onUnmounted(() => {
   window.removeEventListener('analysisTasksChange', onTasksChange)
   window.removeEventListener(AGENT_SESSIONS_CHANGE_EVENT, onSessionsChange)
+  window.removeEventListener(AGENT_FILES_CHANGE_EVENT, onAgentFilesChange)
   window.removeEventListener('storage', onStorage)
   if (thinkTimer) window.clearTimeout(thinkTimer)
   if (streamTimer) window.clearInterval(streamTimer)
@@ -491,6 +504,75 @@ function onDrop(event: DragEvent) {
   event.preventDefault()
   dragDepth.value = 0
   registerFiles(event.dataTransfer.files)
+}
+
+// ---------- 会话文件管理器（会话级，右侧面板） ----------
+
+const uploadedFiles = ref<AgentUploadedFile[]>(readAgentFiles())
+const filesPanelOpen = ref(false)
+const wsiPromote = ref<AgentUploadedFile | null>(null)
+
+function onAgentFilesChange() {
+  uploadedFiles.value = readAgentFiles()
+}
+
+/** 当前会话上传过的文件；草稿态显示已挂载的文件 */
+const sessionFiles = computed(() => {
+  if (activeId.value) return uploadedFiles.value.filter((f) => f.sessionId === activeId.value)
+  const attachedIds = new Set(attached.value.filter((o) => o.kind === 'file').map((o) => o.id))
+  return uploadedFiles.value.filter((f) => attachedIds.has(f.id))
+})
+
+const FILE_CATEGORY_ORDER: AgentFileCategory[] = ['slide', 'doc', 'sheet', 'image', 'other']
+
+/** 按 切片/文档/表格/图片/其他 自动归类分组 */
+const sessionFileGroups = computed(() =>
+  FILE_CATEGORY_ORDER.map((category) => ({
+    category,
+    label: AGENT_FILE_CATEGORY_LABELS[category],
+    items: sessionFiles.value.filter((f) => categorizeAgentFile(f.ext) === category),
+  })).filter((group) => group.items.length > 0),
+)
+
+function toggleFilesPanel() {
+  filesPanelOpen.value = !filesPanelOpen.value
+  if (filesPanelOpen.value) previewFile.value = null
+}
+
+function removeUploadedFile(record: AgentUploadedFile) {
+  deleteAgentFile(record.id)
+  attached.value = attached.value.filter((o) => !(o.kind === 'file' && o.id === record.id))
+}
+
+/** 切片加入 WSI 管理：走真实上传链路（传输队列 → 完成后进入 WSI 管理） */
+function confirmPromoteWsi() {
+  const record = wsiPromote.value
+  if (!record) return
+  const project = record.projectId ? projects.value.find((p) => p.id === record.projectId) : undefined
+  const wsi: WorkspaceWsi = {
+    id: `wsi-${record.id}`,
+    fileName: record.name,
+    size: record.size,
+    site: '未填写',
+    samplingMethod: '未填写',
+    stain: '未指定',
+    boundCase: '未绑定',
+    uploadedAt: new Date().toISOString().slice(0, 10),
+    source: 'file',
+  }
+  enqueueWsiTransfers([wsi])
+  // 项目空间上传的切片归入当前项目
+  if (project) {
+    writeWorkspaceProjects(
+      readWorkspaceProjects().map((p) =>
+        p.id === project.id ? { ...p, standaloneWsiIds: [...new Set([...(p.standaloneWsiIds ?? []), wsi.id])] } : p,
+      ),
+    )
+  }
+  deleteAgentFile(record.id)
+  attached.value = attached.value.filter((o) => !(o.kind === 'file' && o.id === record.id))
+  wsiPromote.value = null
+  dispatchAgentToast(`切片「${record.name}」已进入传输队列`)
 }
 
 // ---------- 右键菜单与弹窗 ----------
@@ -941,6 +1023,7 @@ function renderMdLite(text: string) {
 }
 
 async function openFilePreview(artifact: AgentArtifact) {
+  filesPanelOpen.value = false
   previewFile.value = artifact
   previewContent.value = null
   previewLoading.value = true
@@ -1387,7 +1470,16 @@ watch(
           <span class="truncate">{{ activeSession?.title || (mainView === 'project-form' ? '新建研究项目' : '新对话') }}</span>
         </span>
         <span v-if="activeProject" class="shrink-0 rounded-full border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2.5 py-0.5 text-xs text-[#d292f4]">{{ activeProject.name }}</span>
-        <button class="ml-auto inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-[#94a3b8] hover:bg-white/[0.06] hover:text-white" title="回到上一个页面" @click="exitChat">
+        <button
+          class="relative ml-auto inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm transition-colors"
+          :class="filesPanelOpen ? 'bg-[#8f35b7]/15 text-white' : 'text-[#94a3b8] hover:bg-white/[0.06] hover:text-white'"
+          title="会话文件"
+          @click="toggleFilesPanel"
+        >
+          <Files :size="16" />会话文件
+          <span v-if="sessionFiles.length" class="grid h-4 min-w-4 place-items-center rounded-full bg-[#8f35b7] px-1 text-[10px] font-semibold text-white">{{ sessionFiles.length }}</span>
+        </button>
+        <button class="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-[#94a3b8] hover:bg-white/[0.06] hover:text-white" title="回到上一个页面" @click="exitChat">
           <ArrowLeft :size="16" />返回
         </button>
       </header>
@@ -1715,6 +1807,49 @@ watch(
       </div>
     </Teleport>
 
+    <!-- 会话文件管理器（会话级，按类型自动归类） -->
+    <section
+      v-if="filesPanelOpen"
+      class="flex w-[280px] shrink-0 flex-col border-l border-white/[0.06] bg-[#17181d] max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-[170] max-md:w-[85vw] max-md:shadow-2xl"
+    >
+      <header class="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+        <span class="text-sm font-semibold text-white">会话文件（{{ sessionFiles.length }}）</span>
+        <button class="text-[#64748b] hover:text-white" title="关闭" @click="filesPanelOpen = false"><X :size="16" /></button>
+      </header>
+      <div class="flex-1 overflow-y-auto p-2">
+        <p class="px-2 py-2 text-xs text-[#64748b]">本对话上传的文件，切片可加入 WSI 管理。</p>
+        <div v-if="sessionFiles.length === 0" class="px-2 py-8 text-center text-xs text-[#64748b]">
+          还没有上传文件<br />点输入框「+」或直接把文件拖进来
+        </div>
+        <template v-for="group in sessionFileGroups" :key="group.category">
+          <p class="px-2 pb-1 pt-3 text-xs text-[#64748b]">{{ group.label }}（{{ group.items.length }}）</p>
+          <div
+            v-for="file in group.items"
+            :key="file.id"
+            class="group mb-1 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-2"
+          >
+            <div class="flex items-center gap-2">
+              <FileImage v-if="group.category === 'slide' || group.category === 'image'" :size="15" class="shrink-0 text-[#d292f4]" />
+              <FileSpreadsheet v-else-if="group.category === 'sheet'" :size="15" class="shrink-0 text-[#d292f4]" />
+              <FileText v-else :size="15" class="shrink-0 text-[#d292f4]" />
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-xs font-medium text-white" :title="file.name">{{ file.name }}</span>
+                <span class="block text-[11px] text-[#64748b]">{{ file.size }}</span>
+              </span>
+              <button class="hidden shrink-0 text-[#64748b] hover:text-[#ff9c9c] group-hover:block" title="移除" @click="removeUploadedFile(file)">
+                <X :size="13" />
+              </button>
+            </div>
+            <button
+              v-if="group.category === 'slide'"
+              class="mt-2 w-full rounded-md border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-1 text-[11px] font-medium text-[#d292f4] hover:text-white"
+              @click="wsiPromote = file"
+            >加入 WSI 管理</button>
+          </div>
+        </template>
+      </div>
+    </section>
+
     <!-- 文件产物预览面板（挤压式布局，对齐 Codex：默认查看，保留下载；窄屏回退覆盖式） -->
     <section
       v-if="previewFile"
@@ -1847,6 +1982,25 @@ watch(
               <button type="submit" class="btn-primary">保存</button>
             </div>
           </form>
+        </section>
+      </div>
+    </Teleport>
+
+    <!-- 切片加入 WSI 管理确认弹窗 -->
+    <Teleport to="body">
+      <div v-if="wsiPromote" class="fixed inset-0 z-[150] grid place-items-center bg-black/70 px-4 backdrop-blur-sm" @click.self="wsiPromote = null">
+        <section class="w-full max-w-[420px] rounded-lg border border-white/[0.12] bg-[#202126] shadow-2xl" role="dialog" aria-modal="true">
+          <header class="border-b border-white/[0.08] px-5 py-4">
+            <h2 class="font-semibold text-white">加入 WSI 管理</h2>
+          </header>
+          <div class="px-5 py-4 text-sm leading-6 text-[#aab4c4]">
+            将切片「<b class="text-white">{{ wsiPromote.name }}</b>」（{{ wsiPromote.size }}）上传到 WSI 管理？
+            文件会进入传输队列，处理后出现在 WSI 列表中{{ activeProject ? `，并归入当前项目「${activeProject.name}」` : '' }}。
+          </div>
+          <div class="flex justify-end gap-2 border-t border-white/[0.08] px-5 py-4">
+            <button class="btn-ghost" @click="wsiPromote = null">取消</button>
+            <button class="rounded-lg bg-[#8f35b7] px-4 py-2 text-sm font-medium text-white hover:bg-[#9f4cc6]" @click="confirmPromoteWsi">确认上传</button>
+          </div>
         </section>
       </div>
     </Teleport>
