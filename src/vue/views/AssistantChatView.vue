@@ -1356,6 +1356,16 @@ watch(
       <!-- 输入区 -->
       <div v-if="mainView !== 'project-form'" class="shrink-0 px-6 pb-5" :class="isEmpty ? '' : 'pt-2'">
         <div class="mx-auto max-w-[760px]">
+          <!-- STAD 项目空间：剧本快捷提问常驻输入框上方 -->
+          <div v-if="currentProjectId === STAD_PROJECT_ID && !isEmpty" class="mb-2 flex gap-2 overflow-x-auto pb-1">
+            <button
+              v-for="q in suggestions"
+              :key="q"
+              class="shrink-0 whitespace-nowrap rounded-full border border-[#8f35b7]/35 bg-[#8f35b7]/10 px-3 py-1.5 text-xs text-[#d292f4] transition-colors hover:border-[#8f35b7]/60 hover:text-white disabled:opacity-40"
+              :disabled="!!generationPhase"
+              @click="send(q)"
+            >{{ q }}</button>
+          </div>
           <!-- 草稿态：可选归属项目 -->
           <div v-if="!activeId" class="mb-2 flex items-center gap-2 px-1 text-xs text-[#64748b]">
             对话归属
