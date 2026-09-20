@@ -2047,8 +2047,11 @@ watch(
 .msg-op { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 6px; color: #64748b; }
 .msg-op:hover { background: rgb(255 255 255 / 0.06); color: #fff; }
 .msg-op:disabled { opacity: 0.4; }
-.title-marquee { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
+.title-marquee { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .title-marquee-track { display: inline-flex; }
+/* 第二份文本默认隐藏：只有实测溢出（-live）时才显示并参与滚动 */
+.title-marquee-track > span[aria-hidden='true'] { display: none; }
+.title-marquee.title-marquee-live .title-marquee-track > span[aria-hidden='true'] { display: inline; }
 .title-marquee.title-marquee-live:hover .title-marquee-track { animation: title-marquee 6s linear infinite; }
 @keyframes title-marquee { to { transform: translateX(-50%); } }
 :deep(.preview-table) { width: 100%; border-collapse: collapse; font-size: 12px; }
