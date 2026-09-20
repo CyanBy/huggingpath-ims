@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronRight, CircleCheck, CircleX, ClipboardList, Copy, ExternalLink, FileImage, Files, FileSpreadsheet, FileText, FolderOpen, FolderPlus, ListTodo, MessageSquarePlus, MoreHorizontal, PanelLeft, Paperclip, Pencil, Pin, Plus, RefreshCw, Search, Sparkles, Square, X } from '@lucide/vue'
+import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronRight, CircleCheck, CircleX, ClipboardList, Copy, Download, ExternalLink, Eye, FileImage, Files, FileSpreadsheet, FileText, FolderOpen, FolderPlus, ListTodo, MessageSquarePlus, MoreHorizontal, PanelLeft, Paperclip, Pencil, Pin, Plus, RefreshCw, Search, Sparkles, Square, X } from '@lucide/vue'
 import {
   AGENT_SESSIONS_CHANGE_EVENT,
   appendAgentMessage,
@@ -818,6 +818,101 @@ const copiedId = ref<string | null>(null)
 const expandedThinking = ref<string[]>([])
 const previewImage = ref<AgentArtifact | null>(null)
 
+// ---------- 文件产物预览（侧栏抽屉，默认查看 + 保留下载） ----------
+
+type PreviewContent = { kind: 'csv' | 'md' | 'json' | 'text'; rows?: string[][]; text?: string }
+const previewFile = ref<AgentArtifact | null>(null)
+const previewContent = ref<PreviewContent | null>(null)
+const previewLoading = ref(false)
+
+function parseCsv(raw: string): string[][] {
+  return raw.trim().split(/\r?\n/).map((line) => {
+    const cells: string[] = []
+    let cur = ''
+    let inQuote = false
+    for (const ch of line) {
+      if (ch === '"') inQuote = !inQuote
+      else if (ch === ',' && !inQuote) {
+        cells.push(cur)
+        cur = ''
+      } else cur += ch
+    }
+    cells.push(cur)
+    return cells
+  })
+}
+
+/** 轻量 Markdown 渲染（先转义防注入）：标题/加粗/行内代码/列表/表格 */
+function renderMdLite(text: string) {
+  const esc = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const lines = esc.split('\n')
+  const html: string[] = []
+  const inline = (s: string) =>
+    s
+      .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, '<span class="text-[#d292f4]">$1</span>')
+      .replace(/`([^`]+)`/g, '<code class="rounded bg-white/[0.08] px-1 text-[#d292f4]">$1</code>')
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    if (/^\s*\|/.test(line)) {
+      const block: string[] = []
+      while (i < lines.length && /^\s*\|/.test(lines[i])) {
+        block.push(lines[i])
+        i++
+      }
+      const rows = block.filter((r) => !/^\s*\|[\s:\-|]+\|\s*$/.test(r))
+      let t = '<table class="preview-table">'
+      rows.forEach((r, ri) => {
+        const cells = r.trim().replace(/^\||\|$/g, '').split('|').map((c) => inline(c.trim()))
+        const tag = ri === 0 ? 'th' : 'td'
+        t += `<tr>${cells.map((c) => `<${tag}>${c}</${tag}>`).join('')}</tr>`
+      })
+      html.push(t + '</table>')
+      continue
+    }
+    const heading = line.match(/^(#{1,4})\s+(.*)/)
+    if (heading) {
+      const size = heading[1].length === 1 ? '18px' : heading[1].length === 2 ? '16px' : '14px'
+      html.push(`<p class="mb-1 mt-4 font-semibold text-white" style="font-size:${size}">${inline(heading[2])}</p>`)
+    } else if (/^\s*[-•]\s+/.test(line)) {
+      html.push(`<p class="ml-3 text-sm leading-6">· ${inline(line.replace(/^\s*[-•]\s+/, ''))}</p>`)
+    } else if (/^\s*\d+\.\s+/.test(line)) {
+      html.push(`<p class="ml-3 text-sm leading-6">${inline(line.trim())}</p>`)
+    } else if (line.trim() === '') {
+      html.push('<div class="h-2"></div>')
+    } else {
+      html.push(`<p class="text-sm leading-6 text-[#c3ccd9]">${inline(line)}</p>`)
+    }
+    i++
+  }
+  return html.join('')
+}
+
+async function openFilePreview(artifact: AgentArtifact) {
+  previewFile.value = artifact
+  previewContent.value = null
+  previewLoading.value = true
+  try {
+    const res = await fetch(artifact.path)
+    const raw = await res.text()
+    const ext = artifact.path.split('.').pop()?.toLowerCase()
+    if (ext === 'csv') {
+      previewContent.value = { kind: 'csv', rows: parseCsv(raw).slice(0, 51) }
+    } else if (ext === 'md') {
+      previewContent.value = { kind: 'md', text: raw }
+    } else if (ext === 'json') {
+      previewContent.value = { kind: 'json', text: JSON.stringify(JSON.parse(raw), null, 2) }
+    } else {
+      previewContent.value = { kind: 'text', text: raw }
+    }
+  } catch {
+    previewContent.value = { kind: 'text', text: '文件读取失败，可尝试直接下载。' }
+  } finally {
+    previewLoading.value = false
+  }
+}
+
 function toggleThinking(id: string) {
   expandedThinking.value = expandedThinking.value.includes(id)
     ? expandedThinking.value.filter((t) => t !== id)
@@ -1358,11 +1453,11 @@ watch(
                       <span v-if="artifact.desc" class="block truncate text-xs text-[#64748b]">{{ artifact.desc }}</span>
                     </span>
                   </button>
-                  <a
+                  <button
                     v-else
-                    :href="artifact.path"
-                    target="_blank"
-                    class="flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-[#17181d] px-3 py-2.5 hover:border-[#8f35b7]/50"
+                    class="flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-[#17181d] px-3 py-2.5 text-left hover:border-[#8f35b7]/50"
+                    :title="`查看 ${artifact.label}`"
+                    @click="openFilePreview(artifact)"
                   >
                     <FileSpreadsheet v-if="artifact.kind === 'table'" :size="16" class="shrink-0 text-[#d292f4]" />
                     <FileText v-else :size="16" class="shrink-0 text-[#d292f4]" />
@@ -1370,8 +1465,8 @@ watch(
                       <span class="block truncate text-xs font-medium text-white">{{ artifact.label }}</span>
                       <span v-if="artifact.desc" class="block truncate text-xs text-[#64748b]">{{ artifact.desc }}</span>
                     </span>
-                    <ExternalLink :size="13" class="shrink-0 text-[#64748b]" />
-                  </a>
+                    <Eye :size="13" class="shrink-0 text-[#64748b]" />
+                  </button>
                 </template>
               </div>
               <div class="mt-1 flex gap-1 opacity-0 transition-opacity group-hover/msg:opacity-100">
@@ -1484,6 +1579,49 @@ watch(
             <span class="min-w-0 flex-1 truncate">{{ skill }}</span>
           </button>
         </div>
+      </div>
+    </Teleport>
+
+    <!-- 文件产物预览抽屉（对齐 Codex：默认查看，保留下载） -->
+    <Teleport to="body">
+      <div v-if="previewFile" class="fixed inset-0 z-[170]" @click="previewFile = null">
+        <aside class="absolute inset-y-0 right-0 flex w-[min(720px,92vw)] flex-col border-l border-white/[0.10] bg-[#17181d] shadow-2xl" @click.stop>
+          <header class="flex items-center gap-3 border-b border-white/[0.08] px-5 py-3.5">
+            <FileSpreadsheet v-if="previewFile.kind === 'table'" :size="17" class="shrink-0 text-[#d292f4]" />
+            <FileText v-else :size="17" class="shrink-0 text-[#d292f4]" />
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-semibold text-white">{{ previewFile.label }}</span>
+              <span v-if="previewFile.desc" class="block truncate text-xs text-[#64748b]">{{ previewFile.desc }}</span>
+            </span>
+            <a
+              :href="previewFile.path"
+              :download="previewFile.label"
+              class="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-3 py-1.5 text-xs text-[#d292f4] hover:text-white"
+              title="下载文件"
+            >
+              <Download :size="13" />下载
+            </a>
+            <button class="icon-btn shrink-0" title="关闭" @click="previewFile = null"><X :size="16" /></button>
+          </header>
+          <div class="flex-1 overflow-y-auto p-5">
+            <p v-if="previewLoading" class="text-sm text-[#64748b]">读取文件中…</p>
+            <template v-else-if="previewContent">
+              <div v-if="previewContent.kind === 'csv'" class="overflow-x-auto">
+                <table class="preview-table">
+                  <tr v-for="(row, ri) in previewContent.rows ?? []" :key="ri">
+                    <component :is="ri === 0 ? 'th' : 'td'" v-for="(cell, ci) in row" :key="ci">{{ cell }}</component>
+                  </tr>
+                </table>
+                <p class="mt-2 text-xs text-[#64748b]">仅预览前 50 行，完整数据请下载。</p>
+              </div>
+              <!-- renderMdLite 先转义内容再插入标记，无注入风险 -->
+              <!-- eslint-disable vue/no-v-html -->
+              <div v-else-if="previewContent.kind === 'md'" v-html="renderMdLite(previewContent.text ?? '')"></div>
+              <!-- eslint-enable vue/no-v-html -->
+              <pre v-else class="whitespace-pre-wrap break-all font-mono text-xs leading-5 text-[#aab4c4]">{{ previewContent.text }}</pre>
+            </template>
+          </div>
+        </aside>
       </div>
     </Teleport>
 
@@ -1662,5 +1800,8 @@ watch(
 .msg-op { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 6px; color: #64748b; }
 .msg-op:hover { background: rgb(255 255 255 / 0.06); color: #fff; }
 .msg-op:disabled { opacity: 0.4; }
+:deep(.preview-table) { width: 100%; border-collapse: collapse; font-size: 12px; }
+:deep(.preview-table th), :deep(.preview-table td) { border: 1px solid rgb(255 255 255 / 0.08); padding: 6px 10px; text-align: left; color: #aab4c4; }
+:deep(.preview-table th) { color: #fff; background: rgb(255 255 255 / 0.04); font-weight: 600; }
 .ctx-danger:hover { background: rgb(239 68 68 / 0.12); color: #f28b92; }
 </style>
