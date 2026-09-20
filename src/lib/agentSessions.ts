@@ -28,6 +28,15 @@ export type TaskResultCard = {
   objectCount: string
 }
 
+/** 助手回复交付的产物：图片内联展示可预览，表格/文件新标签页打开 */
+export type AgentArtifact = {
+  kind: 'image' | 'table' | 'file'
+  label: string
+  /** 静态资源路径（public 下）或 hash 路由 */
+  path: string
+  desc?: string
+}
+
 export type AgentMessageCard = AnalysisProposalCard | TaskResultCard
 
 export type AgentChatMessage = {
@@ -39,6 +48,10 @@ export type AgentChatMessage = {
   attachments?: AgentMessageAttachment[]
   /** 富交互卡片（确认闸门 / 任务结果） */
   card?: AgentMessageCard
+  /** 思考过程（推理链），在气泡上方可折叠展示 */
+  thinking?: string
+  /** 交付产物清单（图/表/文件） */
+  artifacts?: AgentArtifact[]
 }
 
 export type AgentChatSession = {
@@ -121,7 +134,7 @@ export function appendAgentMessage(
   sessionId: string,
   role: AgentChatMessage['role'],
   text: string,
-  extras?: { attachments?: AgentMessageAttachment[]; card?: AgentMessageCard },
+  extras?: { attachments?: AgentMessageAttachment[]; card?: AgentMessageCard; thinking?: string; artifacts?: AgentArtifact[] },
 ): AgentChatSession | undefined {
   const now = new Date().toISOString()
   const message: AgentChatMessage = { id: createId('am'), role, text, createdAt: now, ...extras }

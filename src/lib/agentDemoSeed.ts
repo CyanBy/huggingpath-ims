@@ -4,7 +4,8 @@
  */
 import { appendAgentMessage, createAgentSession, listAgentSessions } from './agentSessions';
 import { createAgentAnalysisTask, startAnalysisTask, updateAnalysisTask, type AnalysisTaskStatus } from './analysisTasks';
-import { readWorkspaceProjects, readWorkspaceWsis } from '@/vue/data/pathologyWorkspace';
+import { getStadDemoScript } from './stadScript';
+import { readWorkspaceProjects, readWorkspaceWsis, writeWorkspaceProjects } from '@/vue/data/pathologyWorkspace';
 
 const SEED_FLAG_KEY = 'huggingpath.agentSessions.v1';
 
@@ -100,4 +101,39 @@ export function ensureAgentDemoSeed() {
 
   // 运行中任务排队，由全局 runtime 的 ticker 推进
   void runningTask;
+}
+
+/**
+ * STAD 队列科研演示种子：独立研究项目 + 一条完整的 5 轮演示会话。
+ * 与 ensureAgentDemoSeed 独立幂等，老用户首次打开也会补种。
+ */
+export function ensureStadDemoSeed() {
+  if (typeof window === 'undefined') return;
+  const STAD_PROJECT_ID = 'PRJ-STAD-DEMO';
+  const STAD_SESSION_TITLE = 'STAD 队列 TME 科研演示';
+  if (listAgentSessions().some((s) => s.title === STAD_SESSION_TITLE)) return;
+
+  const projects = readWorkspaceProjects();
+  if (!projects.some((p) => p.id === STAD_PROJECT_ID)) {
+    writeWorkspaceProjects([
+      {
+        id: STAD_PROJECT_ID,
+        name: 'STAD 队列 TME 研究',
+        description: 'TCGA-STAD 375 例胃腺癌队列的肿瘤微环境科研演示（素材来自科研交付包）。',
+        tags: ['STAD', 'TME', 'TCGA'],
+        caseIds: [],
+        standaloneWsiIds: [],
+        memberCount: 1,
+        updatedAt: new Date().toISOString().slice(0, 10),
+        visibility: 'private',
+      },
+      ...projects,
+    ]);
+  }
+
+  const session = createAgentSession(STAD_PROJECT_ID, STAD_SESSION_TITLE);
+  for (const { q, a } of getStadDemoScript()) {
+    appendAgentMessage(session.id, 'user', q);
+    appendAgentMessage(session.id, 'assistant', a.text, { thinking: a.thinking, artifacts: a.artifacts });
+  }
 }

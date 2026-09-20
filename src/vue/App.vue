@@ -4,10 +4,11 @@ import { RouterView, useRoute } from 'vue-router'
 import AppFooter from './components/AppFooter.vue'
 import AppNavbar from './components/AppNavbar.vue'
 import AgentToasts from './components/AgentToasts.vue'
-import { ensureAgentDemoSeed } from '@/lib/agentDemoSeed'
+import { ensureAgentDemoSeed, ensureStadDemoSeed } from '@/lib/agentDemoSeed'
 import { initAgentRuntime } from '@/lib/agentRuntime'
 
 ensureAgentDemoSeed()
+ensureStadDemoSeed()
 initAgentRuntime()
 
 const route = useRoute()

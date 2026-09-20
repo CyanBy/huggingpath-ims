@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronRight, CircleCheck, CircleX, ClipboardList, Copy, ExternalLink, FileImage, Files, FolderOpen, FolderPlus, ListTodo, MessageSquarePlus, MoreHorizontal, PanelLeft, Pencil, Pin, RefreshCw, Search, Sparkles, Square, X } from '@lucide/vue'
+import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronRight, CircleCheck, CircleX, ClipboardList, Copy, ExternalLink, FileImage, Files, FileSpreadsheet, FileText, FolderOpen, FolderPlus, ListTodo, MessageSquarePlus, MoreHorizontal, PanelLeft, Pencil, Pin, RefreshCw, Search, Sparkles, Square, X } from '@lucide/vue'
 import {
   AGENT_SESSIONS_CHANGE_EVENT,
   appendAgentMessage,
@@ -15,6 +15,7 @@ import {
   renameAgentSession,
   toggleAgentSessionPin,
   updateAgentSessionProject,
+  type AgentArtifact,
   type AgentChatMessage,
   type AgentChatSession,
   type AgentMessageAttachment,
@@ -23,6 +24,7 @@ import {
 } from '@/lib/agentSessions'
 import { createAgentAnalysisTask, readAnalysisTasks, startAnalysisTask } from '@/lib/analysisTasks'
 import { logAgentEvent } from '@/lib/eventLog'
+import { matchStadReply } from '@/lib/stadScript'
 import { dispatchAgentToast } from '@/lib/agentRuntime'
 import { getPathologySiteLabel } from '@/lib/pathologySpecimens'
 import { readWorkspaceCases, readWorkspaceProjects, readWorkspaceWsis, writeWorkspaceProjects, type WorkspaceCase, type WorkspaceProject, type WorkspaceWsi } from '@/vue/data/pathologyWorkspace'
@@ -537,11 +539,13 @@ const ATTACH_KIND_LABELS: Record<AttachedObject['kind'], string> = {
   transfer: '传输',
 }
 
+type BuiltReply = { text: string; card?: AnalysisProposalCard; thinking?: string; artifacts?: AgentArtifact[] }
+
 /**
  * 模拟内核：罐装示例回答 + 真实计数，不编造。
  * 实体引用用 [[kind:id:label]] 令牌，renderLite 渲染为新标签页链接。
  */
-function buildReply(question: string, objects: AttachedObject[]): { text: string; card?: AnalysisProposalCard } {
+function buildReply(question: string, objects: AttachedObject[]): BuiltReply {
   // 挂载了分析任务：状态速览
   const taskObject = objects.find((o) => o.kind === 'task')
   if (taskObject) {
@@ -559,6 +563,12 @@ function buildReply(question: string, objects: AttachedObject[]): { text: string
     return {
       text: `关于传输「**${transferObject.label}**」的异常（示例归因）：\n\n最可能的原因是网络中断导致分片校验失败，断点已保留。\n\n建议：在传输队列点「重试」从断点续传；若反复失败，检查单文件是否超过大小限制。`,
     }
+  }
+
+  // STAD 队列科研演示剧本（素材来自 stad_pm_package，数字不许编）
+  const stad = matchStadReply(question)
+  if (stad) {
+    return { text: stad.text, thinking: stad.thinking, artifacts: stad.artifacts }
   }
 
   if (question.includes('TME 特征差异')) {
@@ -657,7 +667,11 @@ function runReply(sessionId: string, question: string, objects: AttachedObject[]
   thinkTimer = window.setTimeout(() => {
     thinkTimer = undefined
     const reply = buildReply(question, objects)
-    const session = appendAgentMessage(sessionId, 'assistant', '', reply.card ? { card: reply.card } : undefined)
+    const session = appendAgentMessage(sessionId, 'assistant', '', {
+      ...(reply.card ? { card: reply.card } : {}),
+      ...(reply.thinking ? { thinking: reply.thinking } : {}),
+      ...(reply.artifacts ? { artifacts: reply.artifacts } : {}),
+    })
     refresh()
     scrollToBottom()
     const messageId = session?.messages[session.messages.length - 1]?.id
@@ -764,6 +778,16 @@ function cancelProposal(message: AgentChatMessage) {
 // ---------- 消息级操作 ----------
 
 const copiedId = ref<string | null>(null)
+
+/** 思考过程折叠块的展开状态（按消息 id） */
+const expandedThinking = ref<string[]>([])
+const previewImage = ref<AgentArtifact | null>(null)
+
+function toggleThinking(id: string) {
+  expandedThinking.value = expandedThinking.value.includes(id)
+    ? expandedThinking.value.filter((t) => t !== id)
+    : [...expandedThinking.value, id]
+}
 
 function copyMessage(message: AgentChatMessage) {
   navigator.clipboard?.writeText(message.text)
@@ -1229,6 +1253,15 @@ watch(
             </div>
             <!-- 助手消息 -->
             <div v-else class="group/msg max-w-[85%]">
+              <!-- 思考过程（可折叠） -->
+              <div v-if="message.thinking" class="mb-1.5">
+                <button class="flex items-center gap-1 text-xs text-[#64748b] hover:text-[#d292f4]" @click="toggleThinking(message.id)">
+                  <ChevronDown v-if="expandedThinking.includes(message.id)" :size="13" />
+                  <ChevronRight v-else :size="13" />
+                  思考过程
+                </button>
+                <div v-if="expandedThinking.includes(message.id)" class="mt-1 whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs leading-5 text-[#8a94a6]">{{ message.thinking }}</div>
+              </div>
               <!-- renderLite 先转义内容再插入标记与链接，无注入风险 -->
               <!-- eslint-disable vue/no-v-html -->
               <div class="whitespace-pre-wrap rounded-2xl border border-white/[0.07] bg-[#202126] px-4 py-3 text-sm leading-6 text-[#d6dce6]"><span v-html="renderLite(message.text)"></span><span v-if="generationPhase === 'streaming' && message.id === lastMessageId" class="inline-block animate-pulse text-[#d292f4]">▍</span></div>
@@ -1268,6 +1301,37 @@ watch(
                   target="_blank"
                   class="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-3 py-1.5 text-xs text-[#d292f4] hover:text-white"
                 ><ExternalLink :size="13" />查看结果</a>
+              </div>
+              <!-- 交付产物（图/表/文件） -->
+              <div v-if="message.artifacts?.length" class="mt-2 grid gap-2" :class="message.artifacts.some((a) => a.kind === 'image') ? 'sm:grid-cols-2' : ''">
+                <template v-for="artifact in message.artifacts" :key="artifact.path">
+                  <button
+                    v-if="artifact.kind === 'image'"
+                    class="overflow-hidden rounded-xl border border-white/[0.08] bg-[#17181d] text-left hover:border-[#8f35b7]/50"
+                    :title="`${artifact.label}，点击预览`"
+                    @click="previewImage = artifact"
+                  >
+                    <img :src="artifact.path" :alt="artifact.label" class="h-32 w-full object-cover object-top" loading="lazy" />
+                    <span class="block px-3 py-2">
+                      <span class="block truncate text-xs font-medium text-white">{{ artifact.label }}</span>
+                      <span v-if="artifact.desc" class="block truncate text-xs text-[#64748b]">{{ artifact.desc }}</span>
+                    </span>
+                  </button>
+                  <a
+                    v-else
+                    :href="artifact.path"
+                    target="_blank"
+                    class="flex items-center gap-2.5 rounded-xl border border-white/[0.08] bg-[#17181d] px-3 py-2.5 hover:border-[#8f35b7]/50"
+                  >
+                    <FileSpreadsheet v-if="artifact.kind === 'table'" :size="16" class="shrink-0 text-[#d292f4]" />
+                    <FileText v-else :size="16" class="shrink-0 text-[#d292f4]" />
+                    <span class="min-w-0 flex-1">
+                      <span class="block truncate text-xs font-medium text-white">{{ artifact.label }}</span>
+                      <span v-if="artifact.desc" class="block truncate text-xs text-[#64748b]">{{ artifact.desc }}</span>
+                    </span>
+                    <ExternalLink :size="13" class="shrink-0 text-[#64748b]" />
+                  </a>
+                </template>
               </div>
               <div class="mt-1 flex gap-1 opacity-0 transition-opacity group-hover/msg:opacity-100">
                 <button class="msg-op" :title="copiedId === message.id ? '已复制' : '复制'" @click="copyMessage(message)">
@@ -1345,6 +1409,19 @@ watch(
         </div>
       </div>
     </section>
+
+    <!-- 图片产物预览 -->
+    <Teleport to="body">
+      <div v-if="previewImage" class="fixed inset-0 z-[170] grid place-items-center bg-black/80 p-6 backdrop-blur-sm" @click.self="previewImage = null">
+        <section class="max-h-[90dvh] max-w-5xl overflow-hidden rounded-xl border border-white/[0.12] bg-[#202126] shadow-2xl" role="dialog" aria-modal="true">
+          <header class="flex items-center justify-between border-b border-white/[0.08] px-4 py-3">
+            <span class="truncate text-sm text-white">{{ previewImage.label }}</span>
+            <button class="icon-btn" title="关闭" @click="previewImage = null"><X :size="16" /></button>
+          </header>
+          <img :src="previewImage.path" :alt="previewImage.label" class="max-h-[78dvh] w-auto max-w-full object-contain" />
+        </section>
+      </div>
+    </Teleport>
 
     <!-- 新建对话归属选择器（对齐 Codex：搜索 + 项目列表 + 新建项目/自由对话） -->
     <Teleport to="body">
