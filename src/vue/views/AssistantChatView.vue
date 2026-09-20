@@ -1372,7 +1372,8 @@ watch(
             <button
               v-for="q in suggestionPages[suggestionPage]"
               :key="q"
-              class="rounded-lg border border-white/[0.07] bg-[#202126] px-4 py-3 text-left text-sm text-[#aab4c4] transition-colors hover:border-[#8f35b7]/40 hover:text-white"
+              class="truncate rounded-lg border border-white/[0.07] bg-[#202126] px-4 py-3 text-left text-sm text-[#aab4c4] transition-colors hover:border-[#8f35b7]/40 hover:text-white"
+              :title="q"
               @click="send(q)"
             >
               {{ q }}
