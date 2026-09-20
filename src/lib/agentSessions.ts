@@ -38,6 +38,18 @@ export type TaskResultCard = {
   objectCount: string
 }
 
+/** 思考过程的结构化步骤（模拟工具调用链） */
+export type AgentThinkingStep = {
+  /** 工具/动作标识，如 query_wsis */
+  tool: string
+  /** 步骤说明 */
+  label: string
+  /** 参数或结果摘要 */
+  detail?: string
+  /** 生成中最后一步为 running，其余 done */
+  status: 'done' | 'running'
+}
+
 /** 助手回复交付的产物：图片内联展示可预览，表格/文件新标签页打开 */
 export type AgentArtifact = {
   kind: 'image' | 'table' | 'file'
@@ -60,6 +72,8 @@ export type AgentChatMessage = {
   card?: AgentMessageCard
   /** 思考过程（推理链），在气泡上方可折叠展示 */
   thinking?: string
+  /** 结构化思考步骤（优先于 thinking 渲染） */
+  thinkingSteps?: AgentThinkingStep[]
   /** 交付产物清单（图/表/文件） */
   artifacts?: AgentArtifact[]
 }
@@ -144,7 +158,7 @@ export function appendAgentMessage(
   sessionId: string,
   role: AgentChatMessage['role'],
   text: string,
-  extras?: { attachments?: AgentMessageAttachment[]; card?: AgentMessageCard; thinking?: string; artifacts?: AgentArtifact[] },
+  extras?: { attachments?: AgentMessageAttachment[]; card?: AgentMessageCard; thinking?: string; thinkingSteps?: AgentThinkingStep[]; artifacts?: AgentArtifact[] },
 ): AgentChatSession | undefined {
   const now = new Date().toISOString()
   const message: AgentChatMessage = { id: createId('am'), role, text, createdAt: now, ...extras }

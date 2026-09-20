@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleX, ClipboardList, Copy, Download, ExternalLink, Eye, FileImage, Files, FileSpreadsheet, FileText, FolderOpen, FolderPlus, ListTodo, MessageSquarePlus, MoreHorizontal, PanelLeft, Paperclip, Pencil, Pin, Plus, RefreshCw, Search, Sparkles, Square, UploadCloud, X } from '@lucide/vue'
+import { Activity, ArrowLeft, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleX, ClipboardList, Copy, Cpu, Download, ExternalLink, Eye, FileImage, Files, FileSpreadsheet, FileText, FolderOpen, FolderPlus, ListTodo, Loader2, MessageSquarePlus, MoreHorizontal, PanelLeft, Paperclip, Pencil, Pin, Plus, RefreshCw, Search, Sparkles, Square, UploadCloud, Wrench, X } from '@lucide/vue'
 import {
   AGENT_SESSIONS_CHANGE_EVENT,
   appendAgentMessage,
@@ -19,6 +19,7 @@ import {
   type AgentChatMessage,
   type AgentChatSession,
   type AgentMessageAttachment,
+  type AgentThinkingStep,
   type AnalysisProposalCard,
   type ProjectProposalCard,
   type TaskResultCard,
@@ -210,6 +211,7 @@ onUnmounted(() => {
   window.removeEventListener('storage', onStorage)
   if (thinkTimer) window.clearTimeout(thinkTimer)
   if (streamTimer) window.clearInterval(streamTimer)
+  if (stepTimer) window.clearTimeout(stepTimer)
 })
 
 type SessionTaskState = { state: 'running' | 'attention' | 'done'; label: string } | null
@@ -729,7 +731,13 @@ const ATTACH_KIND_LABELS: Record<AttachedObject['kind'], string> = {
 /** 预留技能占位（设计稿阶段，点击挂为讨论对象，无实际能力） */
 const PLACEHOLDER_SKILLS = ['Skill 1', 'Skill 2', 'Skill 3']
 
-type BuiltReply = { text: string; card?: AnalysisProposalCard | ProjectProposalCard; thinking?: string; artifacts?: AgentArtifact[] }
+type BuiltReply = {
+  text: string
+  card?: AnalysisProposalCard | ProjectProposalCard
+  thinking?: string
+  thinkingSteps?: AgentThinkingStep[]
+  artifacts?: AgentArtifact[]
+}
 
 // ---------- 模拟 Agent：创建项目流程（意图是演的，查询与写入全真） ----------
 
@@ -766,14 +774,19 @@ function startCreateProjectFlow(sessionId: string, name?: string): BuiltReply {
     setFlow(sessionId, { flow: 'create-project', step: 'ask-name' })
     return {
       text: '好的，我们来建项目。先告诉我：**项目叫什么名字？**\n\n如果能再补一句研究方向，我会把它写进项目说明。',
-      thinking: '▸ 理解意图：create_project\n▸ 项目名缺失 → 向用户澄清（模拟追问）',
+      thinkingSteps: [
+        { tool: '理解意图', label: 'create_project', detail: '项目名缺失 → 向用户澄清', status: 'done' },
+      ],
     }
   }
   setFlow(sessionId, { flow: 'create-project', step: 'ask-slides', name })
   const wsiCount = readWorkspaceWsis().length
   return {
     text: `好的，项目名定为「**${name}**」。\n\n平台现有 **${wsiCount}** 张切片，要纳入哪些？可以选「全部纳入」「先不纳入」，也可以直接输入关键词（比如 HER2、胃、IHC）我来筛。`,
-    thinking: `▸ 理解意图：create_project({ name: "${name}" })\n▸ 🔍 query_wsis() → ${wsiCount} 张候选`,
+    thinkingSteps: [
+      { tool: '理解意图', label: 'create_project', detail: `name: "${name}"`, status: 'done' },
+      { tool: 'query_wsis', label: '查询切片库', detail: `${wsiCount} 张候选`, status: 'done' },
+    ],
   }
 }
 
@@ -785,7 +798,10 @@ function continueCreateProjectFlow(sessionId: string, question: string, flow: Cr
     const wsiCount = readWorkspaceWsis().length
     return {
       text: `记下了：「**${name}**」。\n\n平台现有 **${wsiCount}** 张切片，要纳入哪些？可以选「全部纳入」「先不纳入」，也可以直接输入关键词（比如 HER2、胃、IHC）我来筛。`,
-      thinking: `▸ create_project draft: { name: "${name}" }\n▸ 🔍 query_wsis() → ${wsiCount} 张候选`,
+      thinkingSteps: [
+        { tool: '理解意图', label: 'create_project', detail: `draft: { name: "${name}" }`, status: 'done' },
+        { tool: 'query_wsis', label: '查询切片库', detail: `${wsiCount} 张候选`, status: 'done' },
+      ],
     }
   }
   // ask-slides：解析纳入方式
@@ -804,7 +820,10 @@ function continueCreateProjectFlow(sessionId: string, question: string, flow: Cr
   logAgentEvent('gate.show', `创建项目 · ${name} · ${picked.length} 张切片`, sessionId)
   return {
     text: `好的，项目创建计划如下（${modeNote}）。名称可以当场修改，确认后我就创建：`,
-    thinking: `▸ 🔍 query_wsis → ${picked.length} 张待纳入\n▸ 📋 plan_project({ name: "${name}", wsis: ${picked.length} }) → 待确认`,
+    thinkingSteps: [
+      { tool: 'query_wsis', label: '查询切片库', detail: `${picked.length} 张待纳入`, status: 'done' },
+      { tool: 'plan_project', label: `plan_project({ name: "${name}", wsis: ${picked.length} })`, detail: '待用户确认', status: 'done' },
+    ],
     card: { type: 'project-proposal', name, description, wsis: picked.map((w) => ({ id: w.id, name: w.fileName })), status: 'pending' },
   }
 }
@@ -895,7 +914,7 @@ function buildReply(question: string, objects: AttachedObject[]): BuiltReply {
   // STAD 队列科研演示剧本（素材来自 stad_pm_package，数字不许编）
   const stad = matchStadReply(question)
   if (stad) {
-    return { text: stad.text, thinking: stad.thinking, artifacts: stad.artifacts }
+    return { text: stad.text, thinkingSteps: stad.thinkingSteps, artifacts: stad.artifacts }
   }
 
   if (question.includes('TME 特征差异')) {
@@ -982,23 +1001,46 @@ function clearGenTimers() {
 
 /** 停止生成：思考阶段不留痕迹，流式阶段保留已输出部分 */
 function stopGeneration() {
+  if (stepTimer) window.clearTimeout(stepTimer)
+  stepTimer = undefined
+  liveSteps.value = []
   clearGenTimers()
   generationPhase.value = null
   logAgentEvent('message.stop', activeSession.value?.title ?? '', activeId.value ?? undefined)
   refresh()
 }
 
-/** 模拟回复主流程：思考 3s → 打字机流式输出 3s */
+/** 思考步骤的实时展示（思考阶段逐条揭示） */
+const liveSteps = ref<AgentThinkingStep[]>([])
+let stepTimer: number | undefined
+
+/** 模拟回复主流程：思考 3s（思考步骤逐条揭示）→ 打字机流式输出 3s */
 function runReply(sessionId: string, question: string, objects: AttachedObject[]) {
   generationPhase.value = 'thinking'
+  liveSteps.value = []
+  const reply = resolveReply(sessionId, question, objects)
+  const steps = reply.thinkingSteps ?? []
+  if (steps.length) {
+    let index = 0
+    const reveal = () => {
+      liveSteps.value = steps.slice(0, index + 1).map((s, i) => ({ ...s, status: i === index && i === steps.length - 1 ? 'running' : 'done' }))
+      index += 1
+      if (index < steps.length) stepTimer = window.setTimeout(reveal, 750)
+    }
+    reveal()
+  }
+  const thinkDuration = Math.max(3000, steps.length * 750 + 400)
   thinkTimer = window.setTimeout(() => {
     thinkTimer = undefined
-    const reply = resolveReply(sessionId, question, objects)
+    if (stepTimer) window.clearTimeout(stepTimer)
+    stepTimer = undefined
     const session = appendAgentMessage(sessionId, 'assistant', '', {
       ...(reply.card ? { card: reply.card } : {}),
       ...(reply.thinking ? { thinking: reply.thinking } : {}),
+      ...(reply.thinkingSteps ? { thinkingSteps: reply.thinkingSteps } : {}),
       ...(reply.artifacts ? { artifacts: reply.artifacts } : {}),
     })
+    liveSteps.value = []
     refresh()
     scrollToBottom()
     const messageId = session?.messages[session.messages.length - 1]?.id
@@ -1021,7 +1063,7 @@ function runReply(sessionId: string, question: string, objects: AttachedObject[]
         finishGeneration(sessionId)
       }
     }, 100)
-  }, 3000)
+  }, thinkDuration)
 }
 
 function finishGeneration(sessionId: string) {
@@ -1257,6 +1299,17 @@ function renderLite(text: string) {
       return `<a href="#${hash}" target="_blank" class="text-[#d292f4] underline decoration-[#8f35b7]/50 underline-offset-2 hover:text-white">${label}</a>`
     })
     .replace(/\*\*(.+?)\*\*/g, '<strong class="font-semibold text-white">$1</strong>')
+}
+
+/** 思考步骤工具图标 */
+function stepIcon(tool: string) {
+  if (/理解意图/.test(tool)) return Sparkles
+  if (/query|read|match|split|qc/.test(tool)) return Search
+  if (/stats|adjust|evaluate|bootstrap|fdr/.test(tool)) return Activity
+  if (/train|run|select|stratify/.test(tool)) return Cpu
+  if (/plan/.test(tool)) return ListTodo
+  if (/plot/.test(tool)) return FileImage
+  return Wrench
 }
 
 /** 流式输出中的最后一条消息（渲染光标用） */
@@ -1720,13 +1773,23 @@ watch(
             <!-- 助手消息 -->
             <div v-else class="group/msg max-w-[85%]">
               <!-- 思考过程（可折叠） -->
-              <div v-if="message.thinking" class="mb-1.5">
+              <div v-if="message.thinking || message.thinkingSteps?.length" class="mb-1.5">
                 <button class="flex items-center gap-1 text-xs text-[#64748b] hover:text-[#d292f4]" @click="toggleThinking(message.id)">
                   <ChevronDown v-if="expandedThinking.includes(message.id)" :size="13" />
                   <ChevronRight v-else :size="13" />
                   思考过程
                 </button>
-                <div v-if="expandedThinking.includes(message.id)" class="mt-1 whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-xs leading-5 text-[#8a94a6]">{{ message.thinking }}</div>
+                <div v-if="expandedThinking.includes(message.id)" class="mt-1 rounded-lg border border-white/[0.06] bg-white/[0.03] px-3 py-2">
+                  <ul v-if="message.thinkingSteps?.length" class="space-y-1">
+                    <li v-for="(step, i) in message.thinkingSteps" :key="i" class="flex items-center gap-2 text-xs">
+                      <component :is="stepIcon(step.tool)" :size="12" class="shrink-0 text-[#64748b]" />
+                      <code class="shrink-0 text-[#d292f4]">{{ step.tool }}</code>
+                      <span class="text-[#8a94a6]">{{ step.label }}</span>
+                      <span v-if="step.detail" class="truncate text-[#64748b]">{{ step.detail }}</span>
+                    </li>
+                  </ul>
+                  <p v-else class="whitespace-pre-wrap text-xs leading-5 text-[#8a94a6]">{{ message.thinking }}</p>
+                </div>
               </div>
               <!-- renderLite 先转义内容再插入标记与链接，无注入风险 -->
               <!-- eslint-disable vue/no-v-html -->
@@ -1838,7 +1901,19 @@ watch(
             </div>
           </div>
           <div v-if="generationPhase === 'thinking'" class="flex justify-start">
-            <div class="rounded-2xl border border-white/[0.07] bg-[#202126] px-4 py-3 text-sm text-[#64748b]">正在思考…</div>
+            <div class="rounded-2xl border border-white/[0.07] bg-[#202126] px-4 py-3">
+              <p v-if="!liveSteps.length" class="text-sm text-[#64748b]">正在思考…</p>
+              <ul v-else class="space-y-1.5">
+                <li v-for="(step, i) in liveSteps" :key="i" class="flex items-center gap-2 text-xs">
+                  <Loader2 v-if="step.status === 'running'" :size="13" class="shrink-0 animate-spin text-[#d292f4]" />
+                  <CircleCheck v-else :size="13" class="shrink-0 text-[#95d94e]" />
+                  <component :is="stepIcon(step.tool)" :size="12" class="shrink-0 text-[#64748b]" />
+                  <code class="shrink-0 text-[#d292f4]">{{ step.tool }}</code>
+                  <span class="text-[#aab4c4]">{{ step.label }}</span>
+                  <span v-if="step.detail" class="truncate text-[#64748b]">{{ step.detail }}</span>
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>

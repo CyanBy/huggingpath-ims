@@ -133,6 +133,6 @@ export function ensureStadDemoSeed() {
   const session = createAgentSession(STAD_PROJECT_ID, STAD_SESSION_TITLE);
   for (const { q, a } of getStadDemoScript()) {
     appendAgentMessage(session.id, 'user', q);
-    appendAgentMessage(session.id, 'assistant', a.text, { thinking: a.thinking, artifacts: a.artifacts });
+    appendAgentMessage(session.id, 'assistant', a.text, { thinkingSteps: a.thinkingSteps, artifacts: a.artifacts });
   }
 }
