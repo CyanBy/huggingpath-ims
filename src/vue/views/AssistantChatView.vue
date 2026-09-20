@@ -1477,7 +1477,6 @@ watch(
           @click="toggleFilesPanel"
         >
           <Files :size="16" />会话文件
-          <span v-if="sessionFiles.length" class="grid h-4 min-w-4 place-items-center rounded-full bg-[#8f35b7] px-1 text-[10px] font-semibold text-white">{{ sessionFiles.length }}</span>
         </button>
         <button class="inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-[#94a3b8] hover:bg-white/[0.06] hover:text-white" title="回到上一个页面" @click="exitChat">
           <ArrowLeft :size="16" />返回
@@ -1836,15 +1835,16 @@ watch(
                 <span class="block truncate text-xs font-medium text-white" :title="file.name">{{ file.name }}</span>
                 <span class="block text-[11px] text-[#64748b]">{{ file.size }}</span>
               </span>
+              <button
+                v-if="group.category === 'slide'"
+                class="shrink-0 rounded border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-1.5 py-0.5 text-[11px] font-medium text-[#d292f4] hover:text-white"
+                title="上传到 WSI 管理"
+                @click="wsiPromote = file"
+              >加入 WSI</button>
               <button class="hidden shrink-0 text-[#64748b] hover:text-[#ff9c9c] group-hover:block" title="移除" @click="removeUploadedFile(file)">
                 <X :size="13" />
               </button>
             </div>
-            <button
-              v-if="group.category === 'slide'"
-              class="mt-2 w-full rounded-md border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-1 text-[11px] font-medium text-[#d292f4] hover:text-white"
-              @click="wsiPromote = file"
-            >加入 WSI 管理</button>
           </div>
         </template>
       </div>

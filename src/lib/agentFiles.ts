@@ -32,7 +32,7 @@ export const AGENT_FILE_CATEGORY_LABELS: Record<AgentFileCategory, string> = {
   other: '其他',
 }
 
-const SLIDE_EXTS = ['svs', 'ndpi', 'mrxs', 'sdpc', 'scn', 'tiff', 'tif', 'bif']
+const SLIDE_EXTS = ['svs', 'ndpi', 'mrxs', 'sdpc', 'scn', 'tiff', 'tif', 'bif', 'dcm', 'dcmz']
 const DOC_EXTS = ['doc', 'docx', 'pdf', 'md', 'txt', 'ppt', 'pptx']
 const SHEET_EXTS = ['csv', 'xls', 'xlsx', 'tsv', 'json']
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp']
