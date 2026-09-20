@@ -1372,11 +1372,17 @@ watch(
             <button
               v-for="q in suggestionPages[suggestionPage]"
               :key="q"
-              class="truncate rounded-lg border border-white/[0.07] bg-[#202126] px-4 py-3 text-left text-sm text-[#aab4c4] transition-colors hover:border-[#8f35b7]/40 hover:text-white"
+              class="rounded-lg border border-white/[0.07] bg-[#202126] px-4 py-3 text-left text-sm text-[#aab4c4] transition-colors hover:border-[#8f35b7]/40 hover:text-white"
               :title="q"
               @click="send(q)"
             >
-              {{ q }}
+              <span v-if="q.length > 16" class="title-marquee">
+                <span class="title-marquee-track">
+                  <span class="pr-8">{{ q }}</span>
+                  <span class="pr-8" aria-hidden="true">{{ q }}</span>
+                </span>
+              </span>
+              <span v-else class="truncate">{{ q }}</span>
             </button>
           </div>
           <div class="mt-4 flex items-center justify-center gap-3">
