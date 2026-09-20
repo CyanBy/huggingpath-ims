@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronRight, CircleCheck, CircleX, ClipboardList, Copy, Download, ExternalLink, Eye, FileImage, Files, FileSpreadsheet, FileText, FolderOpen, FolderPlus, ListTodo, MessageSquarePlus, MoreHorizontal, PanelLeft, Paperclip, Pencil, Pin, Plus, RefreshCw, Search, Sparkles, Square, X } from '@lucide/vue'
+import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleX, ClipboardList, Copy, Download, ExternalLink, Eye, FileImage, Files, FileSpreadsheet, FileText, FolderOpen, FolderPlus, ListTodo, MessageSquarePlus, MoreHorizontal, PanelLeft, Paperclip, Pencil, Pin, Plus, RefreshCw, Search, Sparkles, Square, X } from '@lucide/vue'
 import {
   AGENT_SESSIONS_CHANGE_EVENT,
   appendAgentMessage,
@@ -123,10 +123,14 @@ const GENERIC_SUGGESTIONS = [
   '帮我看看哪张切片还没跑过 TME 分析',
 ]
 
-/** 空态建议问题：STAD 项目空间给剧本五连问，其余给通用问题 */
+/** 输入区快捷 chip：STAD 项目空间给剧本五连问，其余给通用问题 */
 const suggestions = computed(() =>
   currentProjectId.value === STAD_PROJECT_ID ? getStadDemoScript().map((s) => s.q) : GENERIC_SUGGESTIONS,
 )
+
+/** 空态建议问题分页：第一页 STAD 剧本，第二页通用问题 */
+const suggestionPages = [getStadDemoScript().map((s) => s.q), GENERIC_SUGGESTIONS]
+const suggestionPage = ref(0)
 
 function refresh() {
   sessions.value = listAgentSessions()
@@ -1345,15 +1349,39 @@ watch(
         </span>
         <h1 class="mt-5 text-2xl font-semibold text-white">{{ activeProject ? `围绕「${activeProject.name}」提问` : '有什么想分析的？' }}</h1>
         <p class="mt-2 text-sm text-[#aab4c4]">{{ activeProject ? '发送第一条消息后，对话会保存在该项目下。' : '检索数据、解读结果、发起分析，都可以直接说。' }}</p>
-        <div class="mt-8 grid w-full max-w-[640px] gap-3 sm:grid-cols-2">
-          <button
-            v-for="q in suggestions"
-            :key="q"
-            class="rounded-lg border border-white/[0.07] bg-[#202126] px-4 py-3 text-left text-sm text-[#aab4c4] transition-colors hover:border-[#8f35b7]/40 hover:text-white"
-            @click="send(q)"
-          >
-            {{ q }}
-          </button>
+        <div class="mt-8 w-full max-w-[640px]">
+          <div class="grid gap-3 sm:grid-cols-2">
+            <button
+              v-for="q in suggestionPages[suggestionPage]"
+              :key="q"
+              class="rounded-lg border border-white/[0.07] bg-[#202126] px-4 py-3 text-left text-sm text-[#aab4c4] transition-colors hover:border-[#8f35b7]/40 hover:text-white"
+              @click="send(q)"
+            >
+              {{ q }}
+            </button>
+          </div>
+          <div class="mt-4 flex items-center justify-center gap-3">
+            <button
+              class="grid h-6 w-6 place-items-center rounded-md text-[#64748b] hover:bg-white/[0.06] hover:text-white disabled:opacity-30"
+              :disabled="suggestionPage === 0"
+              title="上一页"
+              @click="suggestionPage--"
+            ><ChevronLeft :size="14" /></button>
+            <span class="flex items-center gap-1.5">
+              <i
+                v-for="(_, i) in suggestionPages"
+                :key="i"
+                class="h-1.5 w-1.5 rounded-full transition-colors"
+                :class="i === suggestionPage ? 'bg-[#d292f4]' : 'bg-white/[0.15]'"
+              />
+            </span>
+            <button
+              class="grid h-6 w-6 place-items-center rounded-md text-[#64748b] hover:bg-white/[0.06] hover:text-white disabled:opacity-30"
+              :disabled="suggestionPage === suggestionPages.length - 1"
+              title="下一页"
+              @click="suggestionPage++"
+            ><ChevronRight :size="14" /></button>
+          </div>
         </div>
       </div>
 
