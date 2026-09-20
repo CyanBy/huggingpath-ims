@@ -4,6 +4,9 @@
  */
 import type { AgentArtifact } from './agentSessions';
 
+/** STAD 演示项目的固定 ID（种子与剧本共用） */
+export const STAD_PROJECT_ID = 'PRJ-STAD-DEMO';
+
 export type StadReply = {
   text: string;
   thinking: string;

@@ -24,7 +24,7 @@ import {
 } from '@/lib/agentSessions'
 import { createAgentAnalysisTask, readAnalysisTasks, startAnalysisTask } from '@/lib/analysisTasks'
 import { logAgentEvent } from '@/lib/eventLog'
-import { matchStadReply } from '@/lib/stadScript'
+import { getStadDemoScript, matchStadReply, STAD_PROJECT_ID } from '@/lib/stadScript'
 import { dispatchAgentToast } from '@/lib/agentRuntime'
 import { getPathologySiteLabel } from '@/lib/pathologySpecimens'
 import { readWorkspaceCases, readWorkspaceProjects, readWorkspaceWsis, writeWorkspaceProjects, type WorkspaceCase, type WorkspaceProject, type WorkspaceWsi } from '@/vue/data/pathologyWorkspace'
@@ -116,12 +116,17 @@ const recentGroups = computed(() => {
   return [...(pinned.length ? [{ label: '置顶', items: pinned }] : []), ...buckets.filter((b) => b.items.length)]
 })
 
-const suggestions = [
+const GENERIC_SUGGESTIONS = [
   '比较这两个 Case 的 TME 特征差异',
   '这个项目里所有失败的分析是什么原因',
   '把这次分析结果整理成可以汇报的摘要',
   '帮我看看哪张切片还没跑过 TME 分析',
 ]
+
+/** 空态建议问题：STAD 项目空间给剧本五连问，其余给通用问题 */
+const suggestions = computed(() =>
+  currentProjectId.value === STAD_PROJECT_ID ? getStadDemoScript().map((s) => s.q) : GENERIC_SUGGESTIONS,
+)
 
 function refresh() {
   sessions.value = listAgentSessions()

@@ -4,7 +4,7 @@
  */
 import { appendAgentMessage, createAgentSession, listAgentSessions } from './agentSessions';
 import { createAgentAnalysisTask, startAnalysisTask, updateAnalysisTask, type AnalysisTaskStatus } from './analysisTasks';
-import { getStadDemoScript } from './stadScript';
+import { getStadDemoScript, STAD_PROJECT_ID } from './stadScript';
 import { readWorkspaceProjects, readWorkspaceWsis, writeWorkspaceProjects } from '@/vue/data/pathologyWorkspace';
 
 const SEED_FLAG_KEY = 'huggingpath.agentSessions.v1';
@@ -109,7 +109,6 @@ export function ensureAgentDemoSeed() {
  */
 export function ensureStadDemoSeed() {
   if (typeof window === 'undefined') return;
-  const STAD_PROJECT_ID = 'PRJ-STAD-DEMO';
   const STAD_SESSION_TITLE = 'STAD 队列 TME 科研演示';
   if (listAgentSessions().some((s) => s.title === STAD_SESSION_TITLE)) return;
 
