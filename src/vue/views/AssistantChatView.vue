@@ -57,7 +57,10 @@ const vFocusSelect = {
 function checkMarquee(el: HTMLElement) {
   const track = el.querySelector('.title-marquee-track')
   const first = track?.firstElementChild as HTMLElement | null
-  const overflow = first ? first.scrollWidth > el.clientWidth + 1 : false
+  if (!first) return
+  // 第一份文本右侧带 32px 循环间隙 padding，测量真实文字宽度需减去
+  const gap = parseFloat(getComputedStyle(first).paddingRight) || 0
+  const overflow = first.scrollWidth - gap > el.clientWidth + 1
   el.classList.toggle('title-marquee-live', overflow)
 }
 const vMarquee = {
