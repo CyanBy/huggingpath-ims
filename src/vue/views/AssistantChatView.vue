@@ -1109,7 +1109,13 @@ watch(
                 :title="sessionTaskState(child.id)!.label"
               />
               <Pin v-if="child.pinned" :size="12" class="shrink-0 text-[#64748b]" />
-              <span class="min-w-0 flex-1 truncate">{{ child.title }}</span>
+              <span v-if="child.title.length > 14" class="title-marquee min-w-0 flex-1" :title="child.title">
+                <span class="title-marquee-track">
+                  <span class="pr-8">{{ child.title }}</span>
+                  <span class="pr-8" aria-hidden="true">{{ child.title }}</span>
+                </span>
+              </span>
+              <span v-else class="min-w-0 flex-1 truncate">{{ child.title }}</span>
               <span v-if="child.unread && child.id !== activeId" class="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b6b]" title="有新回复" />
               <span
                 class="hidden shrink-0 text-[#64748b] hover:text-white group-hover:block"
@@ -1154,7 +1160,13 @@ watch(
             <span class="min-w-0 flex-1">
               <span class="flex items-center gap-1.5">
                 <Pin v-if="session.pinned" :size="12" class="shrink-0 text-[#64748b]" />
-                <span class="truncate">{{ session.title }}</span>
+                <span v-if="session.title.length > 14" class="title-marquee" :title="session.title">
+                  <span class="title-marquee-track">
+                    <span class="pr-8">{{ session.title }}</span>
+                    <span class="pr-8" aria-hidden="true">{{ session.title }}</span>
+                  </span>
+                </span>
+                <span v-else class="truncate">{{ session.title }}</span>
                 <span v-if="session.unread && session.id !== activeId" class="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b6b]" title="有新回复" />
               </span>
               <span class="block text-xs text-[#64748b]">{{ relativeTime(session.updatedAt) }}</span>
@@ -1193,7 +1205,13 @@ watch(
             <span class="min-w-0 flex-1">
               <span class="flex items-center gap-1.5">
                 <Pin v-if="item.session.pinned" :size="12" class="shrink-0 text-[#64748b]" />
-                <span class="truncate">{{ item.session.title }}</span>
+                <span v-if="item.session.title.length > 14" class="title-marquee" :title="item.session.title">
+                  <span class="title-marquee-track">
+                    <span class="pr-8">{{ item.session.title }}</span>
+                    <span class="pr-8" aria-hidden="true">{{ item.session.title }}</span>
+                  </span>
+                </span>
+                <span v-else class="truncate">{{ item.session.title }}</span>
                 <span v-if="item.session.unread && item.session.id !== activeId" class="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b6b]" title="有新回复" />
               </span>
               <span class="block truncate text-xs text-[#64748b]">
@@ -1515,8 +1533,8 @@ watch(
       <!-- 输入区 -->
       <div v-if="mainView !== 'project-form'" class="shrink-0 px-6 pb-5" :class="isEmpty ? '' : 'pt-2'">
         <div class="mx-auto max-w-[760px]">
-          <!-- STAD 项目空间：剧本快捷提问常驻输入框上方 -->
-          <div v-if="currentProjectId === STAD_PROJECT_ID && !isEmpty" class="mb-2 flex gap-2 overflow-x-auto pb-1">
+          <!-- 快捷提问常驻输入框上方（STAD 空间给剧本，其余给通用问题） -->
+          <div v-if="!isEmpty" class="mb-2 flex gap-2 overflow-x-auto pb-1">
             <button
               v-for="q in suggestions"
               :key="q"
@@ -1827,6 +1845,10 @@ watch(
 .msg-op { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 6px; color: #64748b; }
 .msg-op:hover { background: rgb(255 255 255 / 0.06); color: #fff; }
 .msg-op:disabled { opacity: 0.4; }
+.title-marquee { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
+.title-marquee-track { display: inline-flex; }
+.title-marquee:hover .title-marquee-track { animation: title-marquee 6s linear infinite; }
+@keyframes title-marquee { to { transform: translateX(-50%); } }
 :deep(.preview-table) { width: 100%; border-collapse: collapse; font-size: 12px; }
 :deep(.preview-table th), :deep(.preview-table td) { border: 1px solid rgb(255 255 255 / 0.08); padding: 6px 10px; text-align: left; color: #aab4c4; }
 :deep(.preview-table th) { color: #fff; background: rgb(255 255 255 / 0.04); font-weight: 600; }
