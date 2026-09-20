@@ -20,6 +20,7 @@ import {
   type AgentChatSession,
   type AgentMessageAttachment,
   type AnalysisProposalCard,
+  type ProjectProposalCard,
   type TaskResultCard,
 } from '@/lib/agentSessions'
 import { createAgentAnalysisTask, readAnalysisTasks, startAnalysisTask } from '@/lib/analysisTasks'
@@ -144,16 +145,21 @@ const recentGroups = computed(() => {
 })
 
 const GENERIC_SUGGESTIONS = [
+  '帮我新建一个研究项目',
   '比较这两个 Case 的 TME 特征差异',
   '这个项目里所有失败的分析是什么原因',
   '把这次分析结果整理成可以汇报的摘要',
   '帮我看看哪张切片还没跑过 TME 分析',
 ]
 
-/** 输入区快捷 chip：STAD 项目空间给剧本五连问，其余给通用问题 */
-const suggestions = computed(() =>
-  currentProjectId.value === STAD_PROJECT_ID ? getStadDemoScript().map((s) => s.q) : GENERIC_SUGGESTIONS,
-)
+/** 输入区快捷 chip：模拟流程进行中给步骤选项，STAD 空间给剧本五连问，其余给通用问题 */
+const suggestions = computed(() => {
+  const flow = activeFlow.value
+  if (flow?.flow === 'create-project') {
+    return flow.step === 'ask-slides' ? ['全部纳入', '先不纳入'] : []
+  }
+  return currentProjectId.value === STAD_PROJECT_ID ? getStadDemoScript().map((s) => s.q) : GENERIC_SUGGESTIONS
+})
 
 /** 空态建议问题分页：第一页 STAD 剧本，第二页通用问题 */
 const suggestionPages = [getStadDemoScript().map((s) => s.q), GENERIC_SUGGESTIONS]
@@ -720,7 +726,144 @@ const ATTACH_KIND_LABELS: Record<AttachedObject['kind'], string> = {
 /** 预留技能占位（设计稿阶段，点击挂为讨论对象，无实际能力） */
 const PLACEHOLDER_SKILLS = ['Skill 1', 'Skill 2', 'Skill 3']
 
-type BuiltReply = { text: string; card?: AnalysisProposalCard; thinking?: string; artifacts?: AgentArtifact[] }
+type BuiltReply = { text: string; card?: AnalysisProposalCard | ProjectProposalCard; thinking?: string; artifacts?: AgentArtifact[] }
+
+// ---------- 模拟 Agent：创建项目流程（意图是演的，查询与写入全真） ----------
+
+type CreateProjectFlowState = { flow: 'create-project'; step: 'ask-name' | 'ask-slides'; name?: string }
+
+/** 会话级模拟上下文（内存态，不落盘） */
+const agentFlows = ref(new Map<string, CreateProjectFlowState>())
+const activeFlow = computed(() => (activeId.value ? agentFlows.value.get(activeId.value) ?? null : null))
+
+function setFlow(sessionId: string, state: CreateProjectFlowState | null) {
+  const next = new Map(agentFlows.value)
+  if (state) next.set(sessionId, state)
+  else next.delete(sessionId)
+  agentFlows.value = next
+}
+
+const CREATE_PROJECT_PATTERN = /(新建|创建|帮我建|建一个|建个).{0,8}项目/
+
+/** 回复路由：进行中的流程 > 新意图 > 常规内核 */
+function resolveReply(sessionId: string, question: string, objects: AttachedObject[]): BuiltReply {
+  const flow = agentFlows.value.get(sessionId)
+  if (flow?.flow === 'create-project') return continueCreateProjectFlow(sessionId, question, flow)
+  if (CREATE_PROJECT_PATTERN.test(question)) {
+    const captured = question.match(/(?:新建|创建|帮我建|建一个|建个)(?:一个|个)?(.+?)(?:研究)?项目/)?.[1]?.trim()
+    // 「研究」是泛词（如"新建一个研究项目"），不算有效项目名
+    const inlineName = captured && captured !== '研究' ? captured : undefined
+    return startCreateProjectFlow(sessionId, inlineName)
+  }
+  return buildReply(question, objects)
+}
+
+function startCreateProjectFlow(sessionId: string, name?: string): BuiltReply {
+  if (!name) {
+    setFlow(sessionId, { flow: 'create-project', step: 'ask-name' })
+    return {
+      text: '好的，我们来建项目。先告诉我：**项目叫什么名字？**\n\n如果能再补一句研究方向，我会把它写进项目说明。',
+      thinking: '▸ 理解意图：create_project\n▸ 项目名缺失 → 向用户澄清（模拟追问）',
+    }
+  }
+  setFlow(sessionId, { flow: 'create-project', step: 'ask-slides', name })
+  const wsiCount = readWorkspaceWsis().length
+  return {
+    text: `好的，项目名定为「**${name}**」。\n\n平台现有 **${wsiCount}** 张切片，要纳入哪些？可以选「全部纳入」「先不纳入」，也可以直接输入关键词（比如 HER2、胃、IHC）我来筛。`,
+    thinking: `▸ 理解意图：create_project({ name: "${name}" })\n▸ 🔍 query_wsis() → ${wsiCount} 张候选`,
+  }
+}
+
+function continueCreateProjectFlow(sessionId: string, question: string, flow: CreateProjectFlowState): BuiltReply {
+  const input = question.trim().replace(/[。！!？?]$/, '')
+  if (flow.step === 'ask-name') {
+    const name = input || '未命名研究项目'
+    setFlow(sessionId, { ...flow, step: 'ask-slides', name })
+    const wsiCount = readWorkspaceWsis().length
+    return {
+      text: `记下了：「**${name}**」。\n\n平台现有 **${wsiCount}** 张切片，要纳入哪些？可以选「全部纳入」「先不纳入」，也可以直接输入关键词（比如 HER2、胃、IHC）我来筛。`,
+      thinking: `▸ create_project draft: { name: "${name}" }\n▸ 🔍 query_wsis() → ${wsiCount} 张候选`,
+    }
+  }
+  // ask-slides：解析纳入方式
+  let picked = readWorkspaceWsis()
+  let modeNote = `全部纳入 ${picked.length} 张`
+  if (/不纳入|不用|先不|不需要/.test(input)) {
+    picked = []
+    modeNote = '不纳入切片（空项目）'
+  } else if (!/全部/.test(input)) {
+    picked = picked.filter((w) => `${w.fileName} ${w.stain} ${w.boundCase}`.toLowerCase().includes(input.toLowerCase()))
+    modeNote = `按「${input}」筛选 → ${picked.length} 张`
+  }
+  setFlow(sessionId, null)
+  const name = flow.name ?? '未命名研究项目'
+  const description = `围绕「${name}」的切片队列研究（AI 助手协助创建）。`
+  logAgentEvent('gate.show', `创建项目 · ${name} · ${picked.length} 张切片`, sessionId)
+  return {
+    text: `好的，项目创建计划如下（${modeNote}）。名称可以当场修改，确认后我就创建：`,
+    thinking: `▸ 🔍 query_wsis → ${picked.length} 张待纳入\n▸ 📋 plan_project({ name: "${name}", wsis: ${picked.length} }) → 待确认`,
+    card: { type: 'project-proposal', name, description, wsis: picked.map((w) => ({ id: w.id, name: w.fileName })), status: 'pending' },
+  }
+}
+
+// ---------- 项目创建提案卡 ----------
+
+function projectProposalOf(message: AgentChatMessage): ProjectProposalCard | null {
+  return message.card?.type === 'project-proposal' ? message.card : null
+}
+
+/** 提案卡里的项目名编辑态（确认前可修改） */
+const projectNameEdits = ref<Record<string, string>>({})
+
+function projectEditName(message: AgentChatMessage) {
+  const card = projectProposalOf(message)
+  return card ? (projectNameEdits.value[message.id] ?? card.name) : ''
+}
+
+function setProjectEditName(message: AgentChatMessage, value: string) {
+  projectNameEdits.value = { ...projectNameEdits.value, [message.id]: value }
+}
+
+/** 确认创建：真实写入项目与切片归属，会话归入新项目 */
+function confirmProjectProposal(message: AgentChatMessage) {
+  const card = projectProposalOf(message)
+  const session = activeSession.value
+  if (!card || !session || card.status !== 'pending') return
+  const name = (projectNameEdits.value[message.id] ?? card.name).trim() || card.name
+  const list = readWorkspaceProjects()
+  const id = `PRJ-${new Date().getFullYear()}-${String(list.length + 1).padStart(3, '0')}`
+  const wsiSet = new Set(card.wsis.map((w) => w.id))
+  const related = readWorkspaceWsis().filter((w) => wsiSet.has(w.id))
+  writeWorkspaceProjects([
+    {
+      id,
+      name,
+      description: card.description,
+      tags: ['AI 助手'],
+      caseIds: [...new Set(related.filter((w) => w.boundCase !== '未绑定').map((w) => w.boundCase))],
+      standaloneWsiIds: related.filter((w) => w.boundCase === '未绑定').map((w) => w.id),
+      memberCount: 1,
+      updatedAt: new Date().toISOString().slice(0, 10),
+      visibility: 'private',
+    },
+    ...list,
+  ])
+  updateAgentSessionProject(session.id, id)
+  expandedProjects.value = [...new Set([...expandedProjects.value, id])]
+  patchAgentMessage(session.id, message.id, { card: { ...card, name, status: 'confirmed', projectId: id } })
+  logAgentEvent('gate.confirm', `创建项目 · ${name} · ${card.wsis.length} 张切片`, session.id)
+  dispatchAgentToast(`项目「${name}」已创建`, session.id)
+  refresh()
+}
+
+function cancelProjectProposal(message: AgentChatMessage) {
+  const card = projectProposalOf(message)
+  const session = activeSession.value
+  if (!card || !session || card.status !== 'pending') return
+  patchAgentMessage(session.id, message.id, { card: { ...card, status: 'cancelled' } })
+  logAgentEvent('gate.cancel', `创建项目 · ${card.name}`, session.id)
+  refresh()
+}
 
 /**
  * 模拟内核：罐装示例回答 + 真实计数，不编造。
@@ -847,7 +990,7 @@ function runReply(sessionId: string, question: string, objects: AttachedObject[]
   generationPhase.value = 'thinking'
   thinkTimer = window.setTimeout(() => {
     thinkTimer = undefined
-    const reply = buildReply(question, objects)
+    const reply = resolveReply(sessionId, question, objects)
     const session = appendAgentMessage(sessionId, 'assistant', '', {
       ...(reply.card ? { card: reply.card } : {}),
       ...(reply.thinking ? { thinking: reply.thinking } : {}),
@@ -1604,6 +1747,35 @@ watch(
                 </p>
                 <p v-else class="mt-3 flex items-center gap-1.5 text-xs text-[#64748b]"><CircleX :size="14" />已取消，未创建任务</p>
               </div>
+              <!-- 项目创建提案卡（模拟 Agent） -->
+              <div v-else-if="projectProposalOf(message)" class="mt-2 rounded-xl border border-[#8f35b7]/30 bg-[#8f35b7]/[0.07] p-3.5">
+                <p class="flex items-center gap-2 text-sm font-medium text-white">
+                  <FolderPlus :size="15" class="shrink-0 text-[#d292f4]" />项目创建计划
+                </p>
+                <div v-if="projectProposalOf(message)!.status === 'pending'" class="mt-2.5">
+                  <label class="block text-xs text-[#8a94a6]">项目名称（可修改）</label>
+                  <input
+                    :value="projectEditName(message)"
+                    class="mt-1 w-full rounded-md border border-white/[0.10] bg-[#17181d] px-2.5 py-1.5 text-sm text-white outline-none focus:border-[#8f35b7]/50"
+                    @input="setProjectEditName(message, ($event.target as HTMLInputElement).value)"
+                  />
+                </div>
+                <p v-else class="mt-2 text-sm font-medium text-white">{{ projectProposalOf(message)!.name }}</p>
+                <p class="mt-1 text-xs text-[#8a94a6]">{{ projectProposalOf(message)!.description }}</p>
+                <ul v-if="projectProposalOf(message)!.wsis.length" class="mt-2 max-h-28 space-y-1 overflow-y-auto">
+                  <li v-for="wsi in projectProposalOf(message)!.wsis" :key="wsi.id" class="truncate text-xs text-[#aab4c4]">· {{ wsi.name }}</li>
+                </ul>
+                <p v-else class="mt-2 text-xs text-[#64748b]">不纳入切片（空项目）</p>
+                <div v-if="projectProposalOf(message)!.status === 'pending'" class="mt-3 flex gap-2">
+                  <button class="rounded-lg bg-[#8f35b7] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#9f4cc6]" @click="confirmProjectProposal(message)">确认创建</button>
+                  <button class="rounded-lg border border-white/[0.12] px-3 py-1.5 text-xs text-[#aab4c4] hover:text-white" @click="cancelProjectProposal(message)">取消</button>
+                </div>
+                <p v-else-if="projectProposalOf(message)!.status === 'confirmed'" class="mt-3 flex items-center gap-1.5 text-xs text-[#95d94e]">
+                  <CircleCheck :size="14" />已创建，本对话已归入该项目
+                  <a href="#/workbench/projects" target="_blank" class="text-[#d292f4] underline underline-offset-2">前往项目管理</a>
+                </p>
+                <p v-else class="mt-3 flex items-center gap-1.5 text-xs text-[#64748b]"><CircleX :size="14" />已取消，未创建项目</p>
+              </div>
               <!-- 任务结果回话卡 -->
               <div
                 v-else-if="resultOf(message)"
@@ -1672,7 +1844,7 @@ watch(
       <div v-if="mainView !== 'project-form'" class="shrink-0 px-6 pb-5" :class="isEmpty ? '' : 'pt-2'">
         <div class="mx-auto max-w-[760px]">
           <!-- 快捷提问常驻输入框上方（STAD 空间给剧本，其余给通用问题） -->
-          <div v-if="!isEmpty" class="mb-2 flex gap-2 overflow-x-auto pb-1">
+          <div v-if="!isEmpty && suggestions.length" class="mb-2 flex gap-2 overflow-x-auto pb-1">
             <button
               v-for="q in suggestions"
               :key="q"

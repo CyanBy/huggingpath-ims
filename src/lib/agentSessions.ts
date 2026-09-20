@@ -19,6 +19,16 @@ export type AnalysisProposalCard = {
   taskId?: string
 }
 
+/** 项目创建提案卡（模拟 Agent：建项目 + 纳入切片，确认后真执行） */
+export type ProjectProposalCard = {
+  type: 'project-proposal'
+  name: string
+  description: string
+  wsis: { id: string; name: string }[]
+  status: 'pending' | 'confirmed' | 'cancelled'
+  projectId?: string
+}
+
 /** 任务完成回话卡：任务终态时自动落到来源会话 */
 export type TaskResultCard = {
   type: 'task-result'
@@ -37,7 +47,7 @@ export type AgentArtifact = {
   desc?: string
 }
 
-export type AgentMessageCard = AnalysisProposalCard | TaskResultCard
+export type AgentMessageCard = AnalysisProposalCard | TaskResultCard | ProjectProposalCard
 
 export type AgentChatMessage = {
   id: string
