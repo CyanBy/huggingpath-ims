@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleX, ClipboardList, Copy, Download, ExternalLink, Eye, FileImage, Files, FileSpreadsheet, FileText, FolderOpen, FolderPlus, ListTodo, MessageSquarePlus, MoreHorizontal, PanelLeft, Paperclip, Pencil, Pin, Plus, RefreshCw, Search, Sparkles, Square, X } from '@lucide/vue'
+import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronLeft, ChevronRight, CircleCheck, CircleX, ClipboardList, Copy, Download, ExternalLink, Eye, FileImage, Files, FileSpreadsheet, FileText, FolderOpen, FolderPlus, ListTodo, MessageSquarePlus, MoreHorizontal, PanelLeft, Paperclip, Pencil, Pin, Plus, RefreshCw, Search, Sparkles, Square, UploadCloud, X } from '@lucide/vue'
 import {
   AGENT_SESSIONS_CHANGE_EVENT,
   appendAgentMessage,
@@ -25,6 +25,7 @@ import {
 import { createAgentAnalysisTask, readAnalysisTasks, startAnalysisTask } from '@/lib/analysisTasks'
 import { logAgentEvent } from '@/lib/eventLog'
 import { getStadDemoScript, matchStadReply, STAD_PROJECT_ID } from '@/lib/stadScript'
+import { addAgentFile, bindAgentFilesToSession } from '@/lib/agentFiles'
 import { dispatchAgentToast } from '@/lib/agentRuntime'
 import { getPathologySiteLabel } from '@/lib/pathologySpecimens'
 import { readWorkspaceCases, readWorkspaceProjects, readWorkspaceWsis, writeWorkspaceProjects, type WorkspaceCase, type WorkspaceProject, type WorkspaceWsi } from '@/vue/data/pathologyWorkspace'
@@ -330,7 +331,7 @@ function detachObject(item: AttachedObject) {
 
 /** 查看对象：新开浏览器标签页，不打断当前对话（技能为预留占位，无详情页） */
 function viewObjectInNewTab(item: AttachedObject) {
-  if (item.kind === 'skill') return
+  if (item.kind === 'skill' || item.kind === 'file') return
   const hash =
     item.kind === 'wsi' ? `/workbench/wsi?preview=${item.id}`
     : item.kind === 'case' ? `/workbench/cases/${item.id}`
@@ -437,16 +438,59 @@ function closeAddMenu() {
   addMenu.value = null
 }
 
-/** 文件与文档：打开「我的文件」面板挂 chip */
-function addFromFiles() {
-  filesOpen.value = true
-  closeAddMenu()
-}
-
 /** 预留技能：挂为讨论对象，模拟内核会如实提及 */
 function addSkill(name: string) {
   attachObject({ kind: 'skill', id: name.toLowerCase().replace(/\s+/g, '-'), label: name })
   closeAddMenu()
+}
+
+// ---------- 文件上传（系统对话框 + 拖拽，对齐 ChatGPT 网页版） ----------
+
+const fileInputEl = ref<HTMLInputElement | null>(null)
+const dragDepth = ref(0)
+const dragActive = computed(() => dragDepth.value > 0)
+
+/** 「文件与文档」调起系统文件选择框 */
+function openFileDialog() {
+  fileInputEl.value?.click()
+  closeAddMenu()
+}
+
+function onFileInputChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  registerFiles(input.files)
+  input.value = ''
+}
+
+/** 登记文件并挂为 chip */
+function registerFiles(fileList: FileList | null) {
+  if (!fileList?.length) return
+  for (const file of Array.from(fileList)) {
+    const record = addAgentFile(file, { sessionId: activeId.value ?? undefined, projectId: currentProjectId.value ?? undefined })
+    attachObject({ kind: 'file', id: record.id, label: record.name })
+  }
+}
+
+function onDragEnter(event: DragEvent) {
+  if (!event.dataTransfer?.types.includes('Files')) return
+  event.preventDefault()
+  dragDepth.value += 1
+}
+
+function onDragOver(event: DragEvent) {
+  if (event.dataTransfer?.types.includes('Files')) event.preventDefault()
+}
+
+function onDragLeave(event: DragEvent) {
+  if (!event.dataTransfer?.types.includes('Files')) return
+  dragDepth.value = Math.max(0, dragDepth.value - 1)
+}
+
+function onDrop(event: DragEvent) {
+  if (!event.dataTransfer?.types.includes('Files')) return
+  event.preventDefault()
+  dragDepth.value = 0
+  registerFiles(event.dataTransfer.files)
 }
 
 // ---------- 右键菜单与弹窗 ----------
@@ -573,6 +617,7 @@ const ATTACH_KIND_LABELS: Record<AttachedObject['kind'], string> = {
   project: '项目',
   transfer: '传输',
   skill: '技能',
+  file: '文件',
 }
 
 /** 预留技能占位（设计稿阶段，点击挂为讨论对象，无实际能力） */
@@ -757,6 +802,8 @@ async function send(text?: string) {
     refresh()
     activeId.value = session.id
     router.replace({ query: { session: session.id } })
+    // 草稿期上传的文件随首条消息绑定到新会话
+    bindAgentFilesToSession(attached.value.filter((o) => o.kind === 'file').map((o) => o.id), session.id)
   }
   const objects = [...attached.value]
   appendAgentMessage(activeId.value, 'user', content, objects.length ? { attachments: objects } : undefined)
@@ -1311,7 +1358,26 @@ watch(
     </section>
 
     <!-- 主区 -->
-    <section class="flex min-w-0 flex-1 flex-col">
+    <section
+      class="relative flex min-w-0 flex-1 flex-col"
+      @dragenter="onDragEnter"
+      @dragover="onDragOver"
+      @dragleave="onDragLeave"
+      @drop="onDrop"
+    >
+      <!-- 拖文件进对话的覆盖层（对齐 ChatGPT 网页版） -->
+      <div
+        v-if="dragActive"
+        class="pointer-events-none absolute inset-0 z-50 m-3 grid place-items-center rounded-2xl border-2 border-dashed border-[#d292f4]/70 bg-[#14151a]/85 backdrop-blur-sm"
+      >
+        <div class="flex flex-col items-center gap-3">
+          <span class="grid h-14 w-14 place-items-center rounded-2xl bg-[#8f35b7]/20 text-[#d292f4]">
+            <UploadCloud :size="26" />
+          </span>
+          <p class="text-sm font-medium text-white">松开以上传文件</p>
+          <p class="text-xs text-[#8a94a6]">文件会加入本次对话作为讨论对象</p>
+        </div>
+      </div>
       <header class="flex h-12 shrink-0 items-center gap-3 border-b border-white/[0.06] px-4">
         <button class="text-[#aab4c4] hover:text-white" title="功能侧栏" @click="sidebarOpen = !sidebarOpen">
           <PanelLeft :size="18" />
@@ -1419,7 +1485,7 @@ watch(
               <div v-if="message.attachments?.length" class="mb-1.5 flex flex-wrap justify-end gap-1.5">
                 <template v-for="obj in message.attachments" :key="`${obj.kind}-${obj.id}`">
                   <button
-                    v-if="obj.kind !== 'skill'"
+                    v-if="obj.kind !== 'skill' && obj.kind !== 'file'"
                     class="inline-flex items-center gap-1 rounded-md border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-0.5 text-xs text-[#d292f4] hover:text-white hover:underline"
                     :title="`在新标签页查看 ${obj.label}`"
                     @click="viewObjectInNewTab(obj)"
@@ -1427,7 +1493,7 @@ watch(
                   <span
                     v-else
                     class="inline-flex items-center gap-1 rounded-md border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-0.5 text-xs text-[#d292f4]"
-                    title="预留能力，暂未接入"
+                    :title="obj.kind === 'file' ? '已上传到本次对话的文件' : '预留能力，暂未接入'"
                   >{{ attachKindLabel(obj.kind) }} · {{ obj.label }}</span>
                 </template>
               </div>
@@ -1569,10 +1635,10 @@ watch(
                 :key="`${item.kind}-${item.id}`"
                 class="inline-flex items-center gap-1.5 rounded-md border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-1 text-xs text-[#d292f4]"
               >
-                <button v-if="item.kind !== 'skill'" class="hover:text-white hover:underline" :title="`在新标签页查看 ${item.label}`" @click="viewObjectInNewTab(item)">
+                <button v-if="item.kind !== 'skill' && item.kind !== 'file'" class="hover:text-white hover:underline" :title="`在新标签页查看 ${item.label}`" @click="viewObjectInNewTab(item)">
                   {{ attachKindLabel(item.kind) }} · {{ item.label }}
                 </button>
-                <span v-else title="预留能力，暂未接入">{{ attachKindLabel(item.kind) }} · {{ item.label }}</span>
+                <span v-else :title="item.kind === 'file' ? '已上传到本次对话的文件' : '预留能力，暂未接入'">{{ attachKindLabel(item.kind) }} · {{ item.label }}</span>
                 <button class="hover:text-white" title="移除" @click="detachObject(item)"><X :size="12" /></button>
               </span>
             </div>
@@ -1584,6 +1650,7 @@ watch(
               >
                 <Plus :size="17" />
               </button>
+              <input ref="fileInputEl" type="file" multiple class="hidden" @change="onFileInputChange" />
               <textarea
                 ref="inputEl"
                 v-model="draft"
@@ -1622,7 +1689,7 @@ watch(
       <div v-if="addMenu" class="fixed inset-0 z-[160]" @click="closeAddMenu" @contextmenu.prevent="closeAddMenu">
         <div class="absolute w-[220px] rounded-xl border border-white/[0.08] bg-[#1f2024] p-2 shadow-2xl" :style="{ left: `${addMenu.left}px`, bottom: `${addMenu.bottom}px` }" @click.stop>
           <p class="px-2.5 pb-1 pt-1 text-xs text-[#64748b]">添加</p>
-          <button class="picker-item" @click="addFromFiles">
+          <button class="picker-item" @click="openFileDialog">
             <Paperclip :size="14" class="shrink-0 text-[#d292f4]" />
             <span class="min-w-0 flex-1 truncate">文件与文档</span>
           </button>
