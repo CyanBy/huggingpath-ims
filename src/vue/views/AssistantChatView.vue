@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronRight, CircleCheck, CircleX, ClipboardList, Copy, ExternalLink, FileImage, Files, FileSpreadsheet, FileText, FolderOpen, FolderPlus, ListTodo, MessageSquarePlus, MoreHorizontal, PanelLeft, Pencil, Pin, RefreshCw, Search, Sparkles, Square, X } from '@lucide/vue'
+import { ArrowLeft, ArrowUp, Check, ChevronDown, ChevronRight, CircleCheck, CircleX, ClipboardList, Copy, ExternalLink, FileImage, Files, FileSpreadsheet, FileText, FolderOpen, FolderPlus, ListTodo, MessageSquarePlus, MoreHorizontal, PanelLeft, Paperclip, Pencil, Pin, Plus, RefreshCw, Search, Sparkles, Square, X } from '@lucide/vue'
 import {
   AGENT_SESSIONS_CHANGE_EVENT,
   appendAgentMessage,
@@ -324,8 +324,9 @@ function detachObject(item: AttachedObject) {
   attached.value = attached.value.filter((o) => !(o.kind === item.kind && o.id === item.id))
 }
 
-/** 查看对象：新开浏览器标签页，不打断当前对话 */
+/** 查看对象：新开浏览器标签页，不打断当前对话（技能为预留占位，无详情页） */
 function viewObjectInNewTab(item: AttachedObject) {
+  if (item.kind === 'skill') return
   const hash =
     item.kind === 'wsi' ? `/workbench/wsi?preview=${item.id}`
     : item.kind === 'case' ? `/workbench/cases/${item.id}`
@@ -417,6 +418,31 @@ function pickProjectScope(projectId: string | null) {
 function pickNewProject() {
   closePicker()
   openProjectForm()
+}
+
+// ---------- 输入区「+」添加菜单（对齐 Codex 添加菜单） ----------
+
+const addMenu = ref<{ left: number; bottom: number } | null>(null)
+
+function openAddMenu(event: MouseEvent) {
+  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  addMenu.value = { left: rect.left, bottom: window.innerHeight - rect.top + 8 }
+}
+
+function closeAddMenu() {
+  addMenu.value = null
+}
+
+/** 文件与文档：打开「我的文件」面板挂 chip */
+function addFromFiles() {
+  filesOpen.value = true
+  closeAddMenu()
+}
+
+/** 预留技能：挂为讨论对象，模拟内核会如实提及 */
+function addSkill(name: string) {
+  attachObject({ kind: 'skill', id: name.toLowerCase().replace(/\s+/g, '-'), label: name })
+  closeAddMenu()
 }
 
 // ---------- 右键菜单与弹窗 ----------
@@ -542,7 +568,11 @@ const ATTACH_KIND_LABELS: Record<AttachedObject['kind'], string> = {
   task: '任务',
   project: '项目',
   transfer: '传输',
+  skill: '技能',
 }
+
+/** 预留技能占位（设计稿阶段，点击挂为讨论对象，无实际能力） */
+const PLACEHOLDER_SKILLS = ['Skill 1', 'Skill 2', 'Skill 3']
 
 type BuiltReply = { text: string; card?: AnalysisProposalCard; thinking?: string; artifacts?: AgentArtifact[] }
 
@@ -1239,13 +1269,19 @@ watch(
             <!-- 用户消息 -->
             <div v-if="message.role === 'user'" class="group/msg max-w-[85%]">
               <div v-if="message.attachments?.length" class="mb-1.5 flex flex-wrap justify-end gap-1.5">
-                <button
-                  v-for="obj in message.attachments"
-                  :key="`${obj.kind}-${obj.id}`"
-                  class="inline-flex items-center gap-1 rounded-md border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-0.5 text-xs text-[#d292f4] hover:text-white hover:underline"
-                  :title="`在新标签页查看 ${obj.label}`"
-                  @click="viewObjectInNewTab(obj)"
-                >{{ attachKindLabel(obj.kind) }} · {{ obj.label }}</button>
+                <template v-for="obj in message.attachments" :key="`${obj.kind}-${obj.id}`">
+                  <button
+                    v-if="obj.kind !== 'skill'"
+                    class="inline-flex items-center gap-1 rounded-md border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-0.5 text-xs text-[#d292f4] hover:text-white hover:underline"
+                    :title="`在新标签页查看 ${obj.label}`"
+                    @click="viewObjectInNewTab(obj)"
+                  >{{ attachKindLabel(obj.kind) }} · {{ obj.label }}</button>
+                  <span
+                    v-else
+                    class="inline-flex items-center gap-1 rounded-md border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-0.5 text-xs text-[#d292f4]"
+                    title="预留能力，暂未接入"
+                  >{{ attachKindLabel(obj.kind) }} · {{ obj.label }}</span>
+                </template>
               </div>
               <div class="whitespace-pre-wrap rounded-2xl bg-[#8f35b7]/25 px-4 py-3 text-sm leading-6 text-white">{{ message.text }}</div>
               <div class="mt-1 flex justify-end gap-1 opacity-0 transition-opacity group-hover/msg:opacity-100">
@@ -1385,13 +1421,21 @@ watch(
                 :key="`${item.kind}-${item.id}`"
                 class="inline-flex items-center gap-1.5 rounded-md border border-[#8f35b7]/40 bg-[#8f35b7]/15 px-2 py-1 text-xs text-[#d292f4]"
               >
-                <button class="hover:text-white hover:underline" :title="`在新标签页查看 ${item.label}`" @click="viewObjectInNewTab(item)">
+                <button v-if="item.kind !== 'skill'" class="hover:text-white hover:underline" :title="`在新标签页查看 ${item.label}`" @click="viewObjectInNewTab(item)">
                   {{ attachKindLabel(item.kind) }} · {{ item.label }}
                 </button>
+                <span v-else title="预留能力，暂未接入">{{ attachKindLabel(item.kind) }} · {{ item.label }}</span>
                 <button class="hover:text-white" title="移除" @click="detachObject(item)"><X :size="12" /></button>
               </span>
             </div>
             <div class="flex items-end gap-2">
+              <button
+                class="grid h-9 w-9 shrink-0 place-items-center rounded-xl border border-white/[0.10] text-[#aab4c4] transition-colors hover:border-[#8f35b7]/50 hover:text-white"
+                title="添加"
+                @click="openAddMenu"
+              >
+                <Plus :size="17" />
+              </button>
               <textarea
                 ref="inputEl"
                 v-model="draft"
@@ -1424,6 +1468,24 @@ watch(
         </div>
       </div>
     </section>
+
+    <!-- 输入区「+」添加菜单 -->
+    <Teleport to="body">
+      <div v-if="addMenu" class="fixed inset-0 z-[160]" @click="closeAddMenu" @contextmenu.prevent="closeAddMenu">
+        <div class="absolute w-[220px] rounded-xl border border-white/[0.08] bg-[#1f2024] p-2 shadow-2xl" :style="{ left: `${addMenu.left}px`, bottom: `${addMenu.bottom}px` }" @click.stop>
+          <p class="px-2.5 pb-1 pt-1 text-xs text-[#64748b]">添加</p>
+          <button class="picker-item" @click="addFromFiles">
+            <Paperclip :size="14" class="shrink-0 text-[#d292f4]" />
+            <span class="min-w-0 flex-1 truncate">文件与文档</span>
+          </button>
+          <p class="mt-1 border-t border-white/[0.07] px-2.5 pb-1 pt-2 text-xs text-[#64748b]">技能（预留）</p>
+          <button v-for="skill in PLACEHOLDER_SKILLS" :key="skill" class="picker-item" title="预留能力，挂为讨论对象" @click="addSkill(skill)">
+            <Sparkles :size="14" class="shrink-0 text-[#64748b]" />
+            <span class="min-w-0 flex-1 truncate">{{ skill }}</span>
+          </button>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- 图片产物预览 -->
     <Teleport to="body">

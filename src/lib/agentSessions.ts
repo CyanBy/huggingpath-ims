@@ -4,7 +4,7 @@
  */
 /** 挂载的讨论对象（WSI/Case/任务/项目/传输） */
 export type AgentMessageAttachment = {
-  kind: 'wsi' | 'case' | 'task' | 'project' | 'transfer'
+  kind: 'wsi' | 'case' | 'task' | 'project' | 'transfer' | 'skill'
   id: string
   label: string
 }
