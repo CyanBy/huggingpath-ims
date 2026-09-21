@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { RouterLink } from 'vue-router'
 import { ArrowRight, CheckCircle2, CircleAlert, Clock3, CloudUpload, Eraser, FileImage } from '@lucide/vue'
 import type { UploadTransferItem } from '@/lib/uploadTransferQueue'
@@ -7,26 +7,11 @@ import { useUploadTransfers } from '../composables/useUploadTransfers'
 
 defineEmits<{ close: [] }>()
 
-const { transfers, pendingCount, completedCount, failedCount, canceledCount } = useUploadTransfers()
+const { transfers, pendingCount, failedCount, canceledCount, completedCount, clearPreviewRecords, isVisible } = useUploadTransfers()
 const exceptionCount = computed(() => failedCount.value + canceledCount.value)
 
-/**
- * 清除记录只影响本预览：记录一个清除时间点，早于它的终态记录不再显示。
- * 传输队列与 WSI 数据完全不受影响，进行中的记录也始终显示。
- */
-const CLEARED_KEY = 'huggingpath.transferPreviewClearedAt.v1'
-const clearedAt = ref(Number(localStorage.getItem(CLEARED_KEY) || 0))
-
-function clearPreviewRecords() {
-  clearedAt.value = Date.now()
-  localStorage.setItem(CLEARED_KEY, String(clearedAt.value))
-}
-
 const recentTransfers = computed(() => [...transfers.value]
-  .filter((item) => {
-    const isActive = !['已完成', '上传失败', '已取消'].includes(item.status)
-    return isActive || new Date(item.completedAt || item.createdAt).getTime() > clearedAt.value
-  })
+  .filter(isVisible)
   .sort((a, b) => new Date(b.completedAt || b.createdAt).getTime() - new Date(a.completedAt || a.createdAt).getTime())
   .slice(0, 4))
 

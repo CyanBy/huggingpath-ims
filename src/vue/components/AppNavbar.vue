@@ -16,8 +16,8 @@ const mobileOpen = ref(false)
 const userMenuOpen = ref(false)
 const uploadToolOpen = ref(false)
 const transferCenterOpen = ref(false)
-const { pendingCount, failedCount, canceledCount, allComplete } = useUploadTransfers()
-const transferExceptionCount = computed(() => failedCount.value + canceledCount.value)
+const { pendingCount, visibleExceptionCount, allComplete } = useUploadTransfers()
+const transferExceptionCount = visibleExceptionCount
 
 const workbenchLinks: { label: string; path: string; permission: Permission }[] = [
   { label: 'WSI 管理', path: '/workbench/wsi', permission: 'wsi:manage' },
