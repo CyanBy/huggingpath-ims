@@ -27,6 +27,7 @@ import {
 import { createAgentAnalysisTask, readAnalysisTasks, startAnalysisTask } from '@/lib/analysisTasks'
 import { logAgentEvent } from '@/lib/eventLog'
 import { getStadDemoScript, matchStadReply, STAD_PROJECT_ID } from '@/lib/stadScript'
+import { vMarquee } from '../directives/marquee'
 import {
   AGENT_FILES_CHANGE_EVENT,
   AGENT_FILE_CATEGORY_LABELS,
@@ -54,23 +55,7 @@ const vFocusSelect = {
   },
 }
 
-/** 跑马灯：实测内容溢出容器时才启用悬停滚动（挂载/更新/悬停时重测） */
-function checkMarquee(el: HTMLElement) {
-  const track = el.querySelector('.title-marquee-track')
-  const first = track?.firstElementChild as HTMLElement | null
-  if (!first) return
-  // 第一份文本右侧带 32px 循环间隙 padding，测量真实文字宽度需减去
-  const gap = parseFloat(getComputedStyle(first).paddingRight) || 0
-  const overflow = first.scrollWidth - gap > el.clientWidth + 1
-  el.classList.toggle('title-marquee-live', overflow)
-}
-const vMarquee = {
-  mounted: (el: HTMLElement) => {
-    checkMarquee(el)
-    el.addEventListener('mouseenter', () => checkMarquee(el))
-  },
-  updated: (el: HTMLElement) => checkMarquee(el),
-}
+
 
 type AttachedObject = AgentMessageAttachment
 type MainView = 'chat' | 'project-form'
@@ -1455,8 +1440,7 @@ watch(
               <Pin v-if="child.pinned" :size="12" class="shrink-0 text-[#64748b]" />
               <span v-marquee class="title-marquee min-w-0 flex-1" :title="child.title">
                 <span class="title-marquee-track">
-                  <span class="pr-8">{{ child.title }}</span>
-                  <span class="pr-8" aria-hidden="true">{{ child.title }}</span>
+                  <span>{{ child.title }}</span>
                 </span>
               </span>
               <span v-if="child.unread && child.id !== activeId" class="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b6b]" title="有新回复" />
@@ -1505,8 +1489,7 @@ watch(
                 <Pin v-if="session.pinned" :size="12" class="shrink-0 text-[#64748b]" />
                 <span v-marquee class="title-marquee" :title="session.title">
                   <span class="title-marquee-track">
-                    <span class="pr-8">{{ session.title }}</span>
-                    <span class="pr-8" aria-hidden="true">{{ session.title }}</span>
+                    <span>{{ session.title }}</span>
                   </span>
                 </span>
                 <span v-if="session.unread && session.id !== activeId" class="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b6b]" title="有新回复" />
@@ -1549,8 +1532,7 @@ watch(
                 <Pin v-if="item.session.pinned" :size="12" class="shrink-0 text-[#64748b]" />
                 <span v-marquee class="title-marquee" :title="item.session.title">
                   <span class="title-marquee-track">
-                    <span class="pr-8">{{ item.session.title }}</span>
-                    <span class="pr-8" aria-hidden="true">{{ item.session.title }}</span>
+                    <span>{{ item.session.title }}</span>
                   </span>
                 </span>
                 <span v-if="item.session.unread && item.session.id !== activeId" class="h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff6b6b]" title="有新回复" />
@@ -1709,8 +1691,7 @@ watch(
             >
               <span v-marquee class="title-marquee">
                 <span class="title-marquee-track">
-                  <span class="pr-8">{{ q }}</span>
-                  <span class="pr-8" aria-hidden="true">{{ q }}</span>
+                  <span>{{ q }}</span>
                 </span>
               </span>
             </button>
@@ -2299,9 +2280,8 @@ watch(
 .msg-op:disabled { opacity: 0.4; }
 .title-marquee { display: block; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .title-marquee-track { display: inline-flex; }
-/* 第二份文本默认隐藏：只有实测溢出（-live）时才显示并参与滚动 */
-.title-marquee-track > span[aria-hidden='true'] { display: none; }
-.title-marquee.title-marquee-live .title-marquee-track > span[aria-hidden='true'] { display: inline; }
+/* 副本由 v-marquee 指令在实测溢出时才克隆进 DOM；每份右侧 32px 循环间距 */
+.title-marquee-track > span { margin-right: 32px; }
 .title-marquee.title-marquee-live:hover .title-marquee-track { animation: title-marquee 6s linear infinite; }
 @keyframes title-marquee { to { transform: translateX(-50%); } }
 :deep(.preview-table) { width: 100%; border-collapse: collapse; font-size: 12px; }
